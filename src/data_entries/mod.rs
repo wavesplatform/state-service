@@ -1,18 +1,11 @@
-pub mod daemon;
 pub mod repo;
 mod sql;
-pub mod updates;
 
 use crate::error::Error;
 use crate::schema::data_entries;
-use async_trait::async_trait;
-use diesel::pg::Pg;
-use diesel::serialize;
-use diesel::sql_types::{BigInt, Nullable, Text, VarChar};
-use diesel::types::ToSql;
-use diesel::{Insertable, Queryable, QueryableByName};
+use diesel::sql_types::{BigInt, Nullable, Text};
+use diesel::{Insertable, QueryableByName};
 use sql::{ToSqlSortString, ToSqlWhereString};
-use std::io::Write;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -69,52 +62,7 @@ pub struct InsertableDataEntry {
     pub fragment_10_string: Option<String>,
 }
 
-#[derive(SqlType, QueryId)]
-#[postgres(type_name = "double_varchar_tuple")]
-pub struct DoubleVarCharTupleType;
-
-#[derive(Clone, Debug, Queryable, QueryableByName)]
-#[table_name = "data_entries"]
-pub struct DeletableDataEntry {
-    pub address: String,
-    pub key: String,
-}
-
-impl ToSql<DoubleVarCharTupleType, Pg> for DeletableDataEntry {
-    fn to_sql<W: Write>(&self, out: &mut serialize::Output<W, Pg>) -> serialize::Result {
-        serialize::WriteTuple::<(VarChar, VarChar)>::write_tuple(
-            &(self.address.clone(), self.key.clone()),
-            out,
-        )
-    }
-}
-
-#[derive(Clone, Debug, Queryable, QueryableByName)]
-#[table_name = "data_entries"]
-pub struct DeletableDataEntryWithHeight {
-    pub address: String,
-    pub key: String,
-    pub height: i32,
-}
-
-#[async_trait]
-pub trait DataEntriesSource {
-    async fn fetch_updates(
-        &self,
-        from_height: u32,
-        to_height: u32,
-    ) -> Result<(i32, Vec<InsertableDataEntry>, Vec<DeletableDataEntryWithHeight>), Error>;
-}
-
 pub trait DataEntriesRepo {
-    fn get_last_handled_height(&self) -> Result<u32, Error>;
-
-    fn set_last_handled_height(&mut self, new_height: u32) -> Result<(), Error>;
-
-    fn insert_entries(&mut self, entries: &[InsertableDataEntry]) -> Result<(), Error>;
-
-    fn delete_entries(&mut self, entries: &[DeletableDataEntry]) -> Result<(), Error>;
-
     fn search_data_entries<W: ToSqlWhereString, S: ToSqlSortString>(
         &self,
         query_where: Option<W>,

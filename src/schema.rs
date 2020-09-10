@@ -1,10 +1,4 @@
 table! {
-    last_handled_height (height) {
-        height -> Int4,
-    }
-}
-
-table! {
     data_entries (address, key) {
         address -> Varchar,
         key -> Varchar,

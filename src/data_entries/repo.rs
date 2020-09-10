@@ -1,15 +1,9 @@
-use super::{
-    sql::ToSqlSortString, sql::ToSqlWhereString, DataEntriesRepo, DataEntry, DeletableDataEntry,
-    DoubleVarCharTupleType, InsertableDataEntry,
-};
+use super::sql::{ToSqlSortString, ToSqlWhereString};
+use super::{DataEntriesRepo, DataEntry};
 use crate::db::PgPool;
 use crate::error::Error;
-use crate::schema::data_entries;
-use crate::schema::last_handled_height;
-use crate::schema::last_handled_height::dsl::*;
 use crate::APP_LOG;
 use diesel::prelude::*;
-use diesel::sql_types::Array;
 use slog::info;
 
 #[derive(Clone)]
@@ -24,38 +18,6 @@ impl DataEntriesRepoImpl {
 }
 
 impl DataEntriesRepo for DataEntriesRepoImpl {
-    fn get_last_handled_height(&self) -> Result<u32, Error> {
-        Ok(last_handled_height
-            .select(last_handled_height::height)
-            .first::<i32>(&self.pool.get()?)? as u32)
-    }
-
-    fn set_last_handled_height(&mut self, h: u32) -> Result<(), Error> {
-        diesel::update(last_handled_height::table)
-            .set(last_handled_height::height.eq(h as i32))
-            .execute(&self.pool.get()?)?;
-
-        Ok(())
-    }
-
-    fn insert_entries(&mut self, entries: &[InsertableDataEntry]) -> Result<(), Error> {
-        diesel::insert_into(data_entries::table)
-            .values(entries)
-            .on_conflict((data_entries::address, data_entries::key))
-            .do_nothing()
-            .execute(&self.pool.get()?)?;
-
-        Ok(())
-    }
-
-    fn delete_entries(&mut self, entries: &[DeletableDataEntry]) -> Result<(), Error> {
-        let query = diesel::sql_query("delete from data_entries where (address, key) = ANY($1)")
-            .bind::<Array<DoubleVarCharTupleType>, _>(entries);
-
-        query.execute(&self.pool.get()?)?;
-        Ok(())
-    }
-
     fn search_data_entries<W: ToSqlWhereString, S: ToSqlSortString>(
         &self,
         query_where: Option<W>,
