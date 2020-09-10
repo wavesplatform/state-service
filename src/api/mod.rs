@@ -74,7 +74,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
     let data_entries_repo = Arc::new(repo);
     let with_data_entries_repo = warp::any().map(move || data_entries_repo.clone());
 
-    let filtering = warp::path!("filtering")
+    let filtering = warp::path::end()
         .and(warp::post())
         .and(
             warp::body::json().and_then(|req: serde_json::Value| async move {
@@ -106,7 +106,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                                 },
                             )))
                     })?;
-                    
+
                     let offset: u64 = o.get("offset").map_or(Ok(0 as u64), |o| {
                         o.as_u64()
                             .ok_or(warp::reject::custom(AppError::ValidationError(
