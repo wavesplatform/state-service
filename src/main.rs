@@ -11,7 +11,6 @@ pub mod schema;
 
 use data_entries::repo::DataEntriesRepoImpl;
 use log::APP_LOG;
-use slog::info;
 use tokio::try_join;
 
 #[tokio::main]
@@ -23,7 +22,6 @@ async fn main() -> Result<(), error::Error> {
     let data_entries_repo = DataEntriesRepoImpl::new(service_pg_pool.clone());
 
     let web_join_handle = {
-        info!(APP_LOG, "Starting web server");
         let port = config.port.clone();
         let repo = data_entries_repo.clone();
         tokio::spawn(async move {

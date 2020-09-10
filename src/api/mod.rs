@@ -69,8 +69,6 @@ struct SearchRequest {
 }
 
 pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
-    info!(APP_LOG, "Starting server"; "port" => &port);
-
     let data_entries_repo = Arc::new(repo);
     let with_data_entries_repo = warp::any().map(move || data_entries_repo.clone());
 
@@ -178,7 +176,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
 
     let log = warp::log::custom(access_log);
 
-    // todo handle errors
+    info!(APP_LOG, "Starting web server at 0.0.0.0:{}", port);
     warp::serve(filtering.with(log).recover(handle_rejection))
         .run(([0, 0, 0, 0], port))
         .await
