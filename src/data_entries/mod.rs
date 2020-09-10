@@ -7,13 +7,6 @@ use diesel::sql_types::{BigInt, Nullable, Text};
 use diesel::{Insertable, QueryableByName};
 use sql::{ToSqlSortString, ToSqlWhereString};
 
-#[derive(Debug, Clone)]
-pub struct Config {
-    pub blockchain_updates_url: String,
-    pub blocks_per_request: usize,
-    pub starting_height: u32,
-}
-
 #[derive(Clone, Debug, QueryableByName)]
 #[table_name = "data_entries"]
 pub struct DataEntry {

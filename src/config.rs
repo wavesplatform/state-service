@@ -1,4 +1,4 @@
-use crate::{data_entries, error::Error};
+use crate::error::Error;
 use serde::Deserialize;
 
 fn default_port() -> u16 {
@@ -11,14 +11,6 @@ fn default_pgport() -> u16 {
 
 fn default_pgpool() -> u8 {
     4
-}
-
-fn default_blocks_per_request() -> usize {
-    256
-}
-
-fn default_starting_height() -> u32 {
-    0
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -35,18 +27,11 @@ struct ConfigFlat {
     pub pgpassword: String,
     #[serde(default = "default_pgpool")]
     pub pgpool: u8,
-
-    pub blockchain_updates_url: String,
-    #[serde(default = "default_blocks_per_request")]
-    pub blocks_per_request: usize,
-    #[serde(default = "default_starting_height")]
-    pub starting_height: u32,
 }
 
 #[derive(Debug, Clone)]
 pub struct Config {
     pub port: u16,
-    pub data_entries: data_entries::Config,
     pub postgres: PostgresConfig,
 }
 
@@ -65,11 +50,6 @@ pub fn load() -> Result<Config, Error> {
 
     Ok(Config {
         port: config_flat.port,
-        data_entries: data_entries::Config {
-            blockchain_updates_url: config_flat.blockchain_updates_url,
-            blocks_per_request: config_flat.blocks_per_request,
-            starting_height: config_flat.starting_height,
-        },
         postgres: PostgresConfig {
             host: config_flat.pghost,
             port: config_flat.pgport,
@@ -86,13 +66,6 @@ pub(crate) mod tests {
     use super::PostgresConfig;
     use crate::data_entries;
     use once_cell::sync::Lazy;
-
-    pub static DATA_ENTRIES_STAGENET: Lazy<data_entries::Config> =
-        Lazy::new(|| data_entries::Config {
-            blockchain_updates_url: "https://blockchain-updates-stagenet.waves.exchange".to_owned(),
-            blocks_per_request: 256,
-            starting_height: 0,
-        });
 
     pub static POSTGRES_LOCAL: Lazy<PostgresConfig> = Lazy::new(|| PostgresConfig {
         host: "localhost".to_owned(),
