@@ -1473,6 +1473,7 @@ name = "state-service"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.12.3",
  "bigdecimal",
  "bs58",
  "chrono",
