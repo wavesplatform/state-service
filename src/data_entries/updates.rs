@@ -59,7 +59,7 @@ impl DataEntriesSourceImpl {
     fn collect_data_entries(
         &self,
         update: &BlockchainUpdated,
-    ) -> Result<(Vec<InsertableDataEntry>, Vec<DeletableDataEntryWithHeight>), Error> {
+    ) -> Result<(i32, Vec<InsertableDataEntry>, Vec<DeletableDataEntryWithHeight>), Error> {
         match &update.update {
             Some(Update::Append(Append {
                 transaction_state_updates,
@@ -144,7 +144,7 @@ impl DataEntriesSourceImpl {
                         });
                 });
 
-                Ok((to_insert, to_delete))
+                Ok((height, to_insert, to_delete))
             }
             _ => Err(Error::InvalidMessage(format!(
                 "No valid block append field provided, got: {:?}",
@@ -164,7 +164,7 @@ impl DataEntriesSource for DataEntriesSourceImpl {
         &self,
         from_height: u32,
         to_height: u32,
-    ) -> Result<(Vec<InsertableDataEntry>, Vec<DeletableDataEntryWithHeight>), Error> {
+    ) -> Result<(i32, Vec<InsertableDataEntry>, Vec<DeletableDataEntryWithHeight>), Error> {
         let request = tonic::Request::new(GetBlockUpdatesRangeRequest {
             from_height: from_height as i32,
             to_height: to_height as i32,
@@ -180,14 +180,16 @@ impl DataEntriesSource for DataEntriesSourceImpl {
 
         let mut to_insert = vec![];
         let mut to_delete = vec![];
+        let mut last_height = from_height as i32;
 
         updates.iter().for_each(|u| {
             let mut next = self.collect_data_entries(u).unwrap();
-            to_insert.append(next.0.as_mut());
-            to_delete.append(next.1.as_mut());
+            last_height = next.0;
+            to_insert.append(next.1.as_mut());
+            to_delete.append(next.2.as_mut());
         });
 
-        Ok((to_insert, to_delete))
+        Ok((last_height, to_insert, to_delete))
     }
 }
 

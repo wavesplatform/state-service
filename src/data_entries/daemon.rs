@@ -37,13 +37,13 @@ pub async fn start<T: DataEntriesSource + Send + Sync, U: DataEntriesRepo + Send
         let updates = updates_src
             .fetch_updates(from_height, to_height)
             .await
-            .unwrap_or_else(|_| (Vec::new(), Vec::new()));
-
-        if updates.0.len() > 0 {
-            dbw.insert_entries(&updates.0).unwrap();
-        }
+            .unwrap_or_else(|_| (from_height as i32, Vec::new(), Vec::new()));
 
         if updates.1.len() > 0 {
+            dbw.insert_entries(&updates.1).unwrap();
+        }
+
+        if updates.2.len() > 0 {
             let entries_to_delete: Vec<DeletableDataEntry> = updates
                 .1
                 .clone()
@@ -56,29 +56,12 @@ pub async fn start<T: DataEntriesSource + Send + Sync, U: DataEntriesRepo + Send
             dbw.delete_entries(&entries_to_delete).unwrap();
         }
 
-        let last_inserted = updates.0.last();
-        let last_deleted = updates.1.last();
+        let mut last_updated_height = updates.0;
 
-        let mut last_updated_height = None;
-        if let Some(last_inserted) = last_inserted {
-            if let Some(last_deleted) = last_deleted {
-                if last_deleted.height > last_inserted.height {
-                    last_updated_height = Some(last_deleted.height as u32);
-                } else {
-                    last_updated_height = Some(last_inserted.height as u32);
-                }
-            } else {
-                last_updated_height = Some(last_inserted.height as u32);
-            }
-        }
-
-        match last_updated_height {
-            Some(last_updated_height) => dbw.set_last_handled_height(last_updated_height).unwrap(),
-            None => (),
-        }
-
-        let entries_inserted = updates.0.len();
-        let entries_deleted = updates.1.len();
+        dbw.set_last_handled_height(last_updated_height).unwrap();
+        
+        let entries_inserted = updates.1.len();
+        let entries_deleted = updates.2.len();
 
         info!(APP_LOG, "inserted {} entries", entries_inserted);
         info!(APP_LOG, "deleted {} entries", entries_deleted);

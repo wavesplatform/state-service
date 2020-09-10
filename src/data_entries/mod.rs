@@ -103,7 +103,7 @@ pub trait DataEntriesSource {
         &self,
         from_height: u32,
         to_height: u32,
-    ) -> Result<(Vec<InsertableDataEntry>, Vec<DeletableDataEntryWithHeight>), Error>;
+    ) -> Result<(i32, Vec<InsertableDataEntry>, Vec<DeletableDataEntryWithHeight>), Error>;
 }
 
 pub trait DataEntriesRepo {
