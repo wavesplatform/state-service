@@ -56,10 +56,11 @@ pub async fn start<T: DataEntriesSource + Send + Sync, U: DataEntriesRepo + Send
             dbw.delete_entries(&entries_to_delete).unwrap();
         }
 
-        let mut last_updated_height = updates.0;
+        let last_updated_height = updates.0;
 
-        dbw.set_last_handled_height(last_updated_height).unwrap();
-        
+        dbw.set_last_handled_height(last_updated_height as u32)
+            .unwrap();
+
         let entries_inserted = updates.1.len();
         let entries_deleted = updates.2.len();
 
