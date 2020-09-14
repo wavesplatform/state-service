@@ -2,9 +2,7 @@ use super::sql::{ToSqlSortString, ToSqlWhereString};
 use super::{DataEntriesRepo, DataEntry};
 use crate::db::PgPool;
 use crate::error::Error;
-use crate::APP_LOG;
 use diesel::prelude::*;
-use slog::info;
 
 #[derive(Clone)]
 pub struct DataEntriesRepoImpl {
@@ -36,21 +34,14 @@ impl DataEntriesRepo for DataEntriesRepoImpl {
         if query_sort_string.len() > 0 {
             query_sort_string = format!("ORDER BY {}", query_sort_string);
         }
-        let query = diesel::sql_query(format!(
-            "SELECT address, key, height, value_binary, value_bool, value_integer, value_string FROM data_entries {} {} LIMIT {} OFFSET {}",
+
+        diesel::sql_query(format!(
+            "SELECT de.address, de.key, bm.height, de.value_binary, de.value_bool, de.value_integer, de.value_string FROM data_entries de LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid {} {} LIMIT {} OFFSET {}",
             query_where_string,
             query_sort_string,
             query_limit,
             query_offset
-        ));
-
-        info!(
-            APP_LOG,
-            "{}",
-            diesel::debug_query::<diesel::pg::Pg, _>(&query)
-        );
-
-        Ok(query.get_results(&self.pool.get()?)?)
+        )).get_results::<DataEntry>(&self.pool.get()?).map_err(|err| Error::DbError(err))
     }
 }
 
