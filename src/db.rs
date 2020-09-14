@@ -4,7 +4,6 @@ use diesel::r2d2::{ConnectionManager, Pool};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
-// todo max connections
 pub fn pool(config: &PostgresConfig) -> Result<PgPool, Error> {
     let db_url = format!(
         "postgres://{}:{}@{}:{}/{}",
@@ -12,7 +11,10 @@ pub fn pool(config: &PostgresConfig) -> Result<PgPool, Error> {
     );
 
     let manager = ConnectionManager::<PgConnection>::new(db_url);
-    Ok(Pool::builder().build(manager)?)
+    Ok(Pool::builder()
+        .min_idle(Some(2))
+        .max_size(4)
+        .build(manager)?)
 }
 
 #[cfg(test)]

@@ -10,7 +10,6 @@ pub mod log;
 pub mod schema;
 
 use data_entries::repo::DataEntriesRepoImpl;
-use log::APP_LOG;
 use tokio::try_join;
 
 #[tokio::main]
