@@ -6,6 +6,17 @@ use super::{
 use base64::encode;
 use std::fmt;
 
+impl ValueType {
+    fn to_sql_string(&self) -> String {
+        match self {
+            ValueType::BinaryVal(b) => format!("'{}'", encode(b)),
+            ValueType::BoolVal(b) => format!("{}", b.to_owned()),
+            ValueType::IntVal(n) => format!("{}", n),
+            ValueType::StringVal(s) => format!("'{}'", s.to_owned()),
+        }
+    }
+}
+
 impl Into<SqlWhere> for RequestFilter {
     fn into(self) -> SqlWhere {
         match self {
@@ -62,36 +73,9 @@ impl Into<SqlWhere> for InFilter {
             .into_iter()
             .map(|rows| {
                 rows.into_iter()
-                    .fold("".to_string(), |acc, value| match value {
-                        ValueType::IntVal(n) => {
-                            if acc.len() > 0 {
-                                format!("{}, {}", acc, n)
-                            } else {
-                                format!("{}", n)
-                            }
-                        }
-                        ValueType::StringVal(s) => {
-                            if acc.len() > 0 {
-                                format!("{}, '{}'", acc, s.to_owned())
-                            } else {
-                                format!("'{}'", s.to_owned())
-                            }
-                        }
-                        ValueType::BoolVal(b) => {
-                            if acc.len() > 0 {
-                                format!("{}, {}", acc, b.to_owned())
-                            } else {
-                                format!("{}", b.to_owned())
-                            }
-                        }
-                        ValueType::BinaryVal(b) => {
-                            if acc.len() > 0 {
-                                format!("{}, '{}'", acc, encode(b))
-                            } else {
-                                format!("'{}'", encode(b))
-                            }
-                        }
-                    })
+                    .map(|vt| vt.to_sql_string())
+                    .collect::<Vec<String>>()
+                    .join(",")
             })
             .map(|row| format!("({})", row))
             .collect();

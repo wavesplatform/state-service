@@ -69,8 +69,15 @@ impl Reply for ErrorListResponse {
 
 impl Reject for ErrorListResponse {}
 
+pub enum ValidationErrorCode {
+    MissingRequiredParameter = 00,
+    InvalidParamenterValue = 01,
+    MissingRequiredHeader = 02,
+    InvalidHeaderValue = 03,
+}
+
 impl AppError {
-    pub fn new_validation_error(details: ErrorDetails) -> AppError {
-        AppError::ValidationError("Validation Error".to_owned(), 950201, details)
+    pub fn new_validation_error(code: ValidationErrorCode, details: ErrorDetails) -> AppError {
+        AppError::ValidationError("Validation Error".to_owned(), code as u32, details)
     }
 }

@@ -4,11 +4,9 @@ pub mod parsing;
 use crate::data_entries::{repo::DataEntriesRepoImpl, DataEntriesRepo, RequestFilter, RequestSort};
 use crate::log::APP_LOG;
 use errors::*;
-use parsing::{parse_filter, parse_sort};
-use serde::Serialize;
-use serde::Serializer;
+use serde::{Serialize, Serializer};
 use slog::{error, info};
-use std::convert::Infallible;
+use std::convert::{Infallible, TryFrom};
 use std::sync::Arc;
 use warp::http::StatusCode;
 use warp::{
@@ -79,23 +77,23 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                 if let serde_json::Value::Object(o) = req {
                     let filter = o
                         .get("filter")
-                        .map(|req_filter| match parse_filter(&req_filter) {
-                            Ok(query_filter) => Ok(query_filter),
-                            Err(err) => Err(warp::reject::custom(err)),
+                        .map(|req_filter| {
+                            RequestFilter::try_from(req_filter)
+                                .map_err(|err| warp::reject::custom(err))
                         })
                         .transpose()?;
 
                     let sort = o
                         .get("sort")
-                        .map(|req_sort| match parse_sort(&req_sort) {
-                            Ok(query_sort) => Ok(query_sort),
-                            Err(err) => Err(warp::reject::custom(err)),
+                        .map(|req_sort| {
+                            RequestSort::try_from(req_sort).map_err(|err| warp::reject::custom(err))
                         })
                         .transpose()?;
 
                     let limit: u64 = o.get("limit").map_or(Ok(DEFAULT_LIMIT), |l| {
                         l.as_u64()
                             .ok_or(warp::reject::custom(AppError::new_validation_error(
+                                ValidationErrorCode::InvalidParamenterValue,
                                 ErrorDetails {
                                     parameter: "limit".to_string(),
                                     reason: "Invalid value type, should be an integer.".to_string(),
@@ -103,9 +101,10 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                             )))
                     })?;
 
-                    let offset: u64 = o.get("offset").map_or(Ok(0 as u64), |o| {
+                    let offset: u64 = o.get("offset").map_or(Ok(0u64), |o| {
                         o.as_u64()
                             .ok_or(warp::reject::custom(AppError::new_validation_error(
+                                ValidationErrorCode::InvalidParamenterValue,
                                 ErrorDetails {
                                     parameter: "offset".to_string(),
                                     reason: "Invalid value type, should be an integer.".to_string(),
@@ -121,6 +120,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                     })
                 } else {
                     Err(warp::reject::custom(AppError::new_validation_error(
+                        ValidationErrorCode::InvalidParamenterValue,
                         ErrorDetails {
                             parameter: "body".to_string(),
                             reason: "Invalid type, should be an object.".to_string(),
@@ -202,7 +202,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
 
     if err.is_not_found() {
         error = ErrorListResponse::singleton("Not Found".to_string(), StatusCode::NOT_FOUND);
-    } else if let Some(_e) = err.find::<warp::filters::body::BodyDeserializeError>() {
+    } else if let Some(_) = err.find::<warp::filters::body::BodyDeserializeError>() {
         error = ErrorListResponse::singleton(
             "Body Deserialization Error".to_string(),
             StatusCode::BAD_REQUEST,

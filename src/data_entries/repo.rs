@@ -27,6 +27,7 @@ impl DataEntriesRepo for DataEntriesRepoImpl {
     ) -> Result<Vec<DataEntry>, Error> {
         let query_where_string =
             query_where.map_or("".to_string(), |query_where| query_where.into());
+
         let mut query_sort_string =
             query_sort.map_or("".to_string(), |query_sort| query_sort.into());
         if query_sort_string.len() > 0 {
