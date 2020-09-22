@@ -60,19 +60,3 @@ pub fn load() -> Result<Config, Error> {
         },
     })
 }
-
-#[cfg(test)]
-pub(crate) mod tests {
-    use super::PostgresConfig;
-    use crate::data_entries;
-    use once_cell::sync::Lazy;
-
-    pub static POSTGRES_LOCAL: Lazy<PostgresConfig> = Lazy::new(|| PostgresConfig {
-        host: "localhost".to_owned(),
-        port: 5432,
-        database: "marketmaking".to_owned(),
-        password: "postgres".to_owned(),
-        user: "postgres".to_owned(),
-        pool_size: 2,
-    });
-}

@@ -68,3 +68,9 @@ impl Reply for ErrorListResponse {
 }
 
 impl Reject for ErrorListResponse {}
+
+impl AppError {
+    pub fn new_validation_error(details: ErrorDetails) -> AppError {
+        AppError::ValidationError("Validation Error".to_owned(), 950201, details)
+    }
+}

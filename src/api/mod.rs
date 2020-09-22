@@ -1,10 +1,10 @@
 mod errors;
 pub mod parsing;
 
-use crate::data_entries::{repo::DataEntriesRepoImpl, DataEntriesRepo};
+use crate::data_entries::{repo::DataEntriesRepoImpl, DataEntriesRepo, RequestFilter, RequestSort};
 use crate::log::APP_LOG;
 use errors::*;
-use parsing::{parse_filter, parse_sort, Node, Sort};
+use parsing::{parse_filter, parse_sort};
 use serde::Serialize;
 use serde::Serializer;
 use slog::{error, info};
@@ -62,8 +62,8 @@ impl Reply for DataEntriesResponse {
 
 #[derive(Debug)]
 struct SearchRequest {
-    filter: Option<Node>,
-    sort: Option<Sort>,
+    filter: Option<RequestFilter>,
+    sort: Option<RequestSort>,
     limit: u64,
     offset: u64,
 }
@@ -95,9 +95,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
 
                     let limit: u64 = o.get("limit").map_or(Ok(DEFAULT_LIMIT), |l| {
                         l.as_u64()
-                            .ok_or(warp::reject::custom(AppError::ValidationError(
-                                "Validation Error".to_string(),
-                                950201,
+                            .ok_or(warp::reject::custom(AppError::new_validation_error(
                                 ErrorDetails {
                                     parameter: "limit".to_string(),
                                     reason: "Invalid value type, should be an integer.".to_string(),
@@ -107,9 +105,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
 
                     let offset: u64 = o.get("offset").map_or(Ok(0 as u64), |o| {
                         o.as_u64()
-                            .ok_or(warp::reject::custom(AppError::ValidationError(
-                                "Validation Error".to_string(),
-                                950201,
+                            .ok_or(warp::reject::custom(AppError::new_validation_error(
                                 ErrorDetails {
                                     parameter: "offset".to_string(),
                                     reason: "Invalid value type, should be an integer.".to_string(),
@@ -124,9 +120,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                         offset: offset,
                     })
                 } else {
-                    Err(warp::reject::custom(AppError::ValidationError(
-                        "Validation Error".to_string(),
-                        950201,
+                    Err(warp::reject::custom(AppError::new_validation_error(
                         ErrorDetails {
                             parameter: "body".to_string(),
                             reason: "Invalid type, should be an object.".to_string(),

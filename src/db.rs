@@ -16,12 +16,3 @@ pub fn pool(config: &PostgresConfig) -> Result<PgPool, Error> {
         .max_size(4)
         .build(manager)?)
 }
-
-#[cfg(test)]
-pub(crate) mod tests {
-    use super::*;
-    use crate::config::tests::POSTGRES_LOCAL;
-    use once_cell::sync::Lazy;
-
-    pub static PG_POOL_LOCAL: Lazy<PgPool> = Lazy::new(|| pool(&POSTGRES_LOCAL).unwrap());
-}

@@ -1,41 +1,33 @@
-use crate::api::parsing::{
-    AddressNode, AddressSortNode, AndNode, FragmentNode, FragmentSortNode, InNode, KeyNode,
-    KeySortNode, Node, OrNode, Sort, SortDirection, SortNode, ValueNode, ValueSortNode,
-    ValueSortType, ValueType,
+use super::{
+    AddressFilter, AddressSort, AndFilter, FragmentFilter, FragmentSort, InFilter, KeyFilter,
+    KeySort, OrFilter, RequestFilter, RequestSort, Sort, SortDirection, SqlSort, SqlWhere,
+    ValueFilter, ValueSort, ValueSortType, ValueType,
 };
 use base64::encode;
 use std::fmt;
 
-pub trait ToSqlWhereString {
-    fn to_sql_where_string(&self) -> String;
-}
-
-pub trait ToSqlSortString {
-    fn to_sql_sort_string(&self) -> String;
-}
-
-impl ToSqlWhereString for Node {
-    fn to_sql_where_string(&self) -> String {
+impl Into<SqlWhere> for RequestFilter {
+    fn into(self) -> SqlWhere {
         match self {
-            Node::And(n) => n.to_sql_where_string(),
-            Node::Or(n) => n.to_sql_where_string(),
-            Node::In(n) => n.to_sql_where_string(),
-            Node::Fragment(n) => n.to_sql_where_string(),
-            Node::Key(n) => n.to_sql_where_string(),
-            Node::Value(n) => n.to_sql_where_string(),
-            Node::Address(n) => n.to_sql_where_string(),
+            RequestFilter::And(n) => n.into(),
+            RequestFilter::Or(n) => n.into(),
+            RequestFilter::In(n) => n.into(),
+            RequestFilter::Fragment(n) => n.into(),
+            RequestFilter::Key(n) => n.into(),
+            RequestFilter::Value(n) => n.into(),
+            RequestFilter::Address(n) => n.into(),
         }
     }
 }
 
-impl ToSqlWhereString for AndNode {
-    fn to_sql_where_string(&self) -> String {
+impl Into<SqlWhere> for AndFilter {
+    fn into(self) -> SqlWhere {
         if self.children.len() > 0 {
             format!(
                 "({})",
                 self.children
                     .iter()
-                    .map(|n| n.to_sql_where_string())
+                    .map(|n| n.to_owned().into())
                     .collect::<Vec<String>>()
                     .join(" AND ")
             )
@@ -45,14 +37,14 @@ impl ToSqlWhereString for AndNode {
     }
 }
 
-impl ToSqlWhereString for OrNode {
-    fn to_sql_where_string(&self) -> String {
+impl Into<SqlWhere> for OrFilter {
+    fn into(self) -> SqlWhere {
         if self.children.len() > 0 {
             format!(
                 "({})",
                 self.children
                     .iter()
-                    .map(|n| n.to_sql_where_string())
+                    .map(|n| n.to_owned().into())
                     .collect::<Vec<String>>()
                     .join(" OR ")
             )
@@ -62,8 +54,8 @@ impl ToSqlWhereString for OrNode {
     }
 }
 
-impl ToSqlWhereString for InNode {
-    fn to_sql_where_string(&self) -> String {
+impl Into<SqlWhere> for InFilter {
+    fn into(self) -> SqlWhere {
         let values: Vec<String> = self
             .values
             .clone()
@@ -116,8 +108,8 @@ impl ToSqlWhereString for InNode {
     }
 }
 
-impl ToSqlWhereString for FragmentNode {
-    fn to_sql_where_string(&self) -> String {
+impl Into<SqlWhere> for FragmentFilter {
+    fn into(self) -> SqlWhere {
         format!(
             "fragment_{}_{} {} {}",
             self.position,
@@ -128,34 +120,34 @@ impl ToSqlWhereString for FragmentNode {
     }
 }
 
-impl ToSqlWhereString for KeyNode {
-    fn to_sql_where_string(&self) -> String {
+impl Into<SqlWhere> for KeyFilter {
+    fn into(self) -> SqlWhere {
         format!("key = '{}'", self.value)
     }
 }
 
-impl ToSqlWhereString for ValueNode {
-    fn to_sql_where_string(&self) -> String {
+impl Into<SqlWhere> for ValueFilter {
+    fn into(self) -> SqlWhere {
         format!("value = '{}'", self.value)
     }
 }
 
-impl ToSqlWhereString for AddressNode {
-    fn to_sql_where_string(&self) -> String {
+impl Into<SqlWhere> for AddressFilter {
+    fn into(self) -> SqlWhere {
         format!("address = '{}'", self.value)
     }
 }
 
-impl ToSqlSortString for Sort {
-    fn to_sql_sort_string(&self) -> String {
+impl Into<SqlSort> for RequestSort {
+    fn into(self) -> String {
         self.children
             .clone()
             .into_iter()
             .map(|sort_item| match sort_item {
-                SortNode::Fragment(f) => f.to_sql_sort_string(),
-                SortNode::Key(f) => f.to_sql_sort_string(),
-                SortNode::Value(f) => f.to_sql_sort_string(),
-                SortNode::Address(f) => f.to_sql_sort_string(),
+                Sort::Fragment(f) => f.into(),
+                Sort::Key(f) => f.into(),
+                Sort::Value(f) => f.into(),
+                Sort::Address(f) => f.into(),
             })
             .collect::<Vec<String>>()
             .join(",")
@@ -182,8 +174,8 @@ impl fmt::Display for ValueSortType {
     }
 }
 
-impl ToSqlSortString for FragmentSortNode {
-    fn to_sql_sort_string(&self) -> String {
+impl Into<SqlSort> for FragmentSort {
+    fn into(self) -> SqlSort {
         format!(
             "fragment_{}_{} {}",
             self.position, self.fragment_type, self.direction
@@ -191,20 +183,20 @@ impl ToSqlSortString for FragmentSortNode {
     }
 }
 
-impl ToSqlSortString for KeySortNode {
-    fn to_sql_sort_string(&self) -> String {
+impl Into<SqlSort> for KeySort {
+    fn into(self) -> SqlSort {
         format!("key {}", self.direction)
     }
 }
 
-impl ToSqlSortString for ValueSortNode {
-    fn to_sql_sort_string(&self) -> String {
+impl Into<SqlSort> for ValueSort {
+    fn into(self) -> SqlSort {
         format!("value_{} {}", self.value_type, self.direction)
     }
 }
 
-impl ToSqlSortString for AddressSortNode {
-    fn to_sql_sort_string(&self) -> String {
+impl Into<SqlSort> for AddressSort {
+    fn into(self) -> SqlSort {
         format!("address {}", self.direction)
     }
 }
