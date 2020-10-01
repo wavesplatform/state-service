@@ -1,20 +1,20 @@
 mod errors;
-pub mod parsing;
+mod parsing;
+mod sql;
 
-use crate::data_entries::{repo::DataEntriesRepoImpl, DataEntriesRepo, RequestFilter, RequestSort};
+use crate::data_entries::{repo::DataEntriesRepoImpl, DataEntriesRepo};
 use crate::log::APP_LOG;
 use errors::*;
+use parsing::SearchRequest;
 use serde::{Serialize, Serializer};
 use slog::{error, info};
-use std::convert::{Infallible, TryFrom};
+use std::convert::Infallible;
 use std::sync::Arc;
 use warp::http::StatusCode;
 use warp::{
     reply::{json, Reply, Response},
     Filter, Rejection,
 };
-
-const DEFAULT_LIMIT: u64 = 100;
 
 #[derive(Clone, Debug)]
 enum DataEntryType {
@@ -58,115 +58,70 @@ impl Reply for DataEntriesResponse {
     }
 }
 
-#[derive(Debug)]
-struct SearchRequest {
-    filter: Option<RequestFilter>,
-    sort: Option<RequestSort>,
-    limit: u64,
-    offset: u64,
-}
-
 pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
     let data_entries_repo = Arc::new(repo);
     let with_data_entries_repo = warp::any().map(move || data_entries_repo.clone());
 
-    let filtering = warp::path::end()
+    let filtering = warp::path::path("search")
+        .and(warp::path::end())
         .and(warp::post())
         .and(
             warp::body::json().and_then(|req: serde_json::Value| async move {
-                if let serde_json::Value::Object(o) = req {
-                    let filter = o
-                        .get("filter")
-                        .map(|req_filter| {
-                            RequestFilter::try_from(req_filter)
-                                .map_err(|err| warp::reject::custom(err))
-                        })
-                        .transpose()?;
-
-                    let sort = o
-                        .get("sort")
-                        .map(|req_sort| {
-                            RequestSort::try_from(req_sort).map_err(|err| warp::reject::custom(err))
-                        })
-                        .transpose()?;
-
-                    let limit: u64 = o.get("limit").map_or(Ok(DEFAULT_LIMIT), |l| {
-                        l.as_u64()
-                            .ok_or(warp::reject::custom(AppError::new_validation_error(
-                                ValidationErrorCode::InvalidParamenterValue,
-                                ErrorDetails {
-                                    parameter: "limit".to_string(),
-                                    reason: "Invalid value type, should be an integer.".to_string(),
-                                },
-                            )))
-                    })?;
-
-                    let offset: u64 = o.get("offset").map_or(Ok(0u64), |o| {
-                        o.as_u64()
-                            .ok_or(warp::reject::custom(AppError::new_validation_error(
-                                ValidationErrorCode::InvalidParamenterValue,
-                                ErrorDetails {
-                                    parameter: "offset".to_string(),
-                                    reason: "Invalid value type, should be an integer.".to_string(),
-                                },
-                            )))
-                    })?;
-
-                    Ok(SearchRequest {
-                        filter: filter,
-                        sort: sort,
-                        limit: limit,
-                        offset: offset,
+                let req_string = req.to_string();
+                let jd = &mut serde_json::Deserializer::from_str(&req_string);
+                serde_path_to_error::deserialize(jd)
+                    .map_err(|err| warp::reject::custom(AppError::from(err)))
+                    .and_then(|req: SearchRequest| match req.is_valid() {
+                        Ok(_) => Ok(req),
+                        Err(err) => Err(warp::reject::custom(err)),
                     })
-                } else {
-                    Err(warp::reject::custom(AppError::new_validation_error(
-                        ValidationErrorCode::InvalidParamenterValue,
-                        ErrorDetails {
-                            parameter: "body".to_string(),
-                            reason: "Invalid type, should be an object.".to_string(),
-                        },
-                    )))
-                }
             }),
         )
         .and(with_data_entries_repo.clone())
-        .map(|req: SearchRequest, repo: Arc<DataEntriesRepoImpl>| {
-            match repo.search_data_entries(req.filter, req.sort, req.limit + 1, req.offset) {
-                Ok(data_entries) => DataEntriesResponse {
-                    entries: data_entries
-                        .clone()
-                        .into_iter()
-                        .take(req.limit as usize)
-                        .map(|de| {
-                            let value;
-                            if let Some(v) = de.value_binary {
-                                value = DataEntryType::BinaryVal(v);
-                            } else if let Some(v) = de.value_bool {
-                                value = DataEntryType::BoolVal(v);
-                            } else if let Some(v) = de.value_integer {
-                                value = DataEntryType::IntVal(v);
-                            } else {
-                                value = DataEntryType::StringVal(de.value_string.unwrap());
-                            }
-                            DataEntry {
-                                address: de.address.clone(),
-                                key: de.key.clone(),
-                                height: de.height.clone(),
-                                value: value,
-                            }
-                        })
-                        .collect(),
-                    has_next_page: data_entries.len() > req.limit as usize,
-                }
-                .into_response(),
-                Err(err) => {
-                    error!(APP_LOG, "couldn't query db"; "error" => format!("{:?}", err));
-
-                    ErrorListResponse::singleton(err.into(), StatusCode::INTERNAL_SERVER_ERROR)
-                        .into_response()
-                }
-            }
-        });
+        .and_then(
+            |req: SearchRequest, repo: Arc<DataEntriesRepoImpl>| async move {
+                repo.search_data_entries(
+                    req.filter.clone(),
+                    req.sort.clone(),
+                    req.limit,
+                    req.offset,
+                )
+                .and_then::<DataEntriesResponse, _>(|data_entries| {
+                    Ok(DataEntriesResponse {
+                        entries: data_entries
+                            .clone()
+                            .into_iter()
+                            .take(req.limit as usize)
+                            .map(|de| {
+                                let value;
+                                if let Some(v) = de.value_binary {
+                                    value = DataEntryType::BinaryVal(v);
+                                } else if let Some(v) = de.value_bool {
+                                    value = DataEntryType::BoolVal(v);
+                                } else if let Some(v) = de.value_integer {
+                                    value = DataEntryType::IntVal(v);
+                                } else {
+                                    value = DataEntryType::StringVal(de.value_string.unwrap());
+                                }
+                                DataEntry {
+                                    address: de.address.clone(),
+                                    key: de.key.clone(),
+                                    height: de.height.clone(),
+                                    value: value,
+                                }
+                            })
+                            .collect(),
+                        has_next_page: data_entries.len() > req.limit as usize,
+                    })
+                })
+                .or_else::<Rejection, _>(|err| {
+                    Err(
+                        warp::reject::custom::<AppError>(AppError::DbError(err.to_string()).into())
+                            .into(),
+                    )
+                })
+            },
+        );
 
     let log = warp::log::custom(access_log);
 
@@ -221,7 +176,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
         error = ErrorListResponse::new(
             error_message.to_owned(),
             StatusCode::BAD_REQUEST,
-            Some(error_details.to_owned()),
+            error_details.to_owned(),
             Some(error_code.to_owned()),
         );
     } else if let Some(AppError::DbError(_)) = err.find() {

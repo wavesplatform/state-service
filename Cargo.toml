@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_path_to_error = "0.1"
 envy = "0.4"
 tokio = { version = "0.2", features = ["full"] }
 waves-protobuf-schemas = { git = "https://github.com/wavesplatform/protobuf-schemas", branch = "blockchain-updates-from-1.2.6" }
@@ -27,6 +28,7 @@ num-traits = "0.2.2"
 warp = "0.2"
 regex = "1"
 base64 = "0.12"
+thiserror = "1.0"
 
 [[bin]]
 name = "service"
