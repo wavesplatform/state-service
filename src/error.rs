@@ -4,7 +4,6 @@ use std::fmt::Display;
 pub enum Error {
     LoadConfigFailed(envy::Error),
     InvalidMessage(String),
-    InvalidBase58String(bs58::decode::Error),
     DbError(diesel::result::Error),
     ConnectionPoolError(r2d2::Error),
 }
@@ -23,12 +22,6 @@ impl From<diesel::result::Error> for Error {
     }
 }
 
-impl From<bs58::decode::Error> for Error {
-    fn from(v: bs58::decode::Error) -> Self {
-        InvalidBase58String(v)
-    }
-}
-
 impl From<envy::Error> for Error {
     fn from(err: envy::Error) -> Self {
         LoadConfigFailed(err)
@@ -40,7 +33,6 @@ impl Display for Error {
         match self {
             LoadConfigFailed(err) => write!(f, "LoadConfigFailed: {}", err),
             InvalidMessage(message) => write!(f, "InvalidMessage: {}", message),
-            InvalidBase58String(err) => write!(f, "InvalidBase58String: {}", err),
             DbError(err) => write!(f, "DbError: {}", err),
             ConnectionPoolError(err) => write!(f, "ConnectionPoolError: {}", err),
         }
