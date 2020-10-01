@@ -15,7 +15,7 @@ impl SearchRequest {
     pub fn is_valid(&self) -> Result<(), AppError> {
         self.filter
             .as_ref()
-            .map(|f| f.is_valid("".to_string()))
+            .map(|f| f.is_valid("filter.".to_string()))
             .unwrap_or(Ok(()))
     }
 }
