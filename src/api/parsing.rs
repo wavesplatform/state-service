@@ -104,19 +104,19 @@ impl FragmentFilter {
 }
 
 impl KeyFilter {
-    fn is_valid(&self, context: String) -> Result<(), AppError> {
+    fn is_valid(&self, _: String) -> Result<(), AppError> {
         Ok(())
     }
 }
 
 impl ValueFilter {
-    fn is_valid(&self, context: String) -> Result<(), AppError> {
+    fn is_valid(&self, _: String) -> Result<(), AppError> {
         Ok(())
     }
 }
 
 impl AddressFilter {
-    fn is_valid(&self, context: String) -> Result<(), AppError> {
+    fn is_valid(&self, _: String) -> Result<(), AppError> {
         Ok(())
     }
 }
