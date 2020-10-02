@@ -10,7 +10,6 @@ pub mod log;
 pub mod schema;
 
 use data_entries::repo::DataEntriesRepoImpl;
-use tokio::try_join;
 
 #[tokio::main]
 async fn main() -> Result<(), error::Error> {
@@ -20,17 +19,7 @@ async fn main() -> Result<(), error::Error> {
 
     let data_entries_repo = DataEntriesRepoImpl::new(service_pg_pool.clone());
 
-    let web_join_handle = {
-        let port = config.port.clone();
-        let repo = data_entries_repo.clone();
-        tokio::spawn(async move {
-            api::start(port, repo).await;
-        })
-    };
-
-    if let Err(err) = try_join!(web_join_handle) {
-        panic!(err);
-    }
+    api::start(config.port, data_entries_repo).await;
 
     Ok(())
 }

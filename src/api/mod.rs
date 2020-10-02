@@ -16,6 +16,11 @@ use warp::{
     Filter, Rejection,
 };
 
+const NOT_FOUND_ERROR_MESSAGE: &str = "Not Found";
+const METHOD_NOT_ALLOWED_ERROR_MESSAGE: &str = "Method Not Allowed";
+const INTERNAL_SERVER_ERROR_MESSAGE: &str = "Internal Server Error";
+const BODY_DESERIALIZATION_ERROR_MESSAGE: &str = "Body Deserialization Error";
+
 #[derive(Clone, Debug)]
 enum DataEntryType {
     BinaryVal(Vec<u8>),
@@ -156,15 +161,18 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     let error: ErrorListResponse;
 
     if err.is_not_found() {
-        error = ErrorListResponse::singleton("Not Found".to_string(), StatusCode::NOT_FOUND);
+        error = ErrorListResponse::singleton(
+            NOT_FOUND_ERROR_MESSAGE.to_string(),
+            StatusCode::NOT_FOUND,
+        );
     } else if let Some(_) = err.find::<warp::filters::body::BodyDeserializeError>() {
         error = ErrorListResponse::singleton(
-            "Body Deserialization Error".to_string(),
+            BODY_DESERIALIZATION_ERROR_MESSAGE.to_string(),
             StatusCode::BAD_REQUEST,
         );
     } else if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {
         error = ErrorListResponse::singleton(
-            "Method Not Allowed".to_string(),
+            METHOD_NOT_ALLOWED_ERROR_MESSAGE.to_string(),
             StatusCode::METHOD_NOT_ALLOWED,
         );
     } else if let Some(err) = err.find::<warp::reject::InvalidQuery>() {
@@ -182,14 +190,14 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     } else if let Some(AppError::DbError(_)) = err.find() {
         error!(APP_LOG, "DbError: {:?}", err);
         error = ErrorListResponse::singleton(
-            "Internal Server Error".to_string(),
+            INTERNAL_SERVER_ERROR_MESSAGE.to_string(),
             StatusCode::INTERNAL_SERVER_ERROR,
         );
     } else {
         // We should have expected this... Just log and say its a 500
-        error!(APP_LOG, "unhandled rejection: {:?}", err);
+        error!(APP_LOG, "Unhandled rejection: {:?}", err);
         error = ErrorListResponse::singleton(
-            "Internal Server Error".to_string(),
+            INTERNAL_SERVER_ERROR_MESSAGE.to_string(),
             StatusCode::INTERNAL_SERVER_ERROR,
         );
     }
