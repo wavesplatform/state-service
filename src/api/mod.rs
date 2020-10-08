@@ -67,9 +67,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
     let data_entries_repo = Arc::new(repo);
     let with_data_entries_repo = warp::any().map(move || data_entries_repo.clone());
 
-    let filtering = warp::path::path("search")
-        .and(warp::path::end())
-        .and(warp::post())
+    let filtering = warp::post()
         .and(
             warp::body::json().and_then(|req: serde_json::Value| async move {
                 let req_string = req.to_string();
@@ -130,10 +128,20 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
 
     let log = warp::log::custom(access_log);
 
+    let search_filtering = warp::path::path("search")
+        .and(warp::path::end())
+        .and(filtering.clone());
+    let root_filtering = warp::path::end().and(filtering.clone());
+
     info!(APP_LOG, "Starting web server at 0.0.0.0:{}", port);
-    warp::serve(filtering.with(log).recover(handle_rejection))
-        .run(([0, 0, 0, 0], port))
-        .await
+    warp::serve(
+        search_filtering
+            .or(root_filtering)
+            .with(log)
+            .recover(handle_rejection),
+    )
+    .run(([0, 0, 0, 0], port))
+    .await
 }
 
 fn access_log(info: warp::log::Info) {
