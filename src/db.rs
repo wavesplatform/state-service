@@ -14,7 +14,7 @@ pub fn pool(config: &PostgresConfig) -> Result<PgPool, Error> {
     let manager = ConnectionManager::<PgConnection>::new(db_url);
     Ok(Pool::builder()
         .min_idle(Some(2))
-        .max_size(4)
+        .max_size(config.pool_size as u32)
         .idle_timeout(Some(Duration::from_secs(5 * 60)))
         .build(manager)?)
 }
