@@ -106,6 +106,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                                 } else if let Some(v) = de.value_integer {
                                     value = DataEntryType::IntVal(v);
                                 } else {
+                                    // unwrap is safe because of data entry value is not null
                                     value = DataEntryType::StringVal(de.value_string.unwrap());
                                 }
                                 DataEntry {

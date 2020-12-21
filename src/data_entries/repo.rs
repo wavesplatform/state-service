@@ -33,7 +33,10 @@ impl DataEntriesRepo for DataEntriesRepoImpl {
         }
 
         diesel::sql_query(format!(
-            "SELECT de.address, de.key, bm.height, de.value_binary, de.value_bool, de.value_integer, de.value_string FROM data_entries de LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid WHERE de.superseded_by = $1 AND {} {} LIMIT {} OFFSET {}",
+            "SELECT de.address, de.key, bm.height, de.value_binary, de.value_bool, de.value_integer, de.value_string 
+            FROM data_entries de 
+            LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid 
+            WHERE de.superseded_by = $1 AND (de.value_binary IS NOT NULL OR de.value_bool IS NOT NULL OR de.value_integer IS NOT NULL OR de.value_string IS NOT NULL) AND {} {} LIMIT {} OFFSET {}",
             query_where_string,
             query_sort_string,
             limit,
