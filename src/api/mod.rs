@@ -88,7 +88,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                 repo.search_data_entries(
                     req.filter.clone(),
                     req.sort.clone(),
-                    req.limit,
+                    req.limit + 1,
                     req.offset,
                 )
                 .and_then::<DataEntriesResponse, _>(|data_entries| {
