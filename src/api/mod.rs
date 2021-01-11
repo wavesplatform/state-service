@@ -49,6 +49,14 @@ pub struct DataEntry {
     key: String,
     height: i32,
     value: DataEntryType,
+    fragments: Vec<DataEntryFragment>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DataEntryFragment {
+    String { value: String },
+    Integer { value: i64 },
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -98,6 +106,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                             .into_iter()
                             .take(req.limit as usize)
                             .map(|de| {
+                                let fragments = (&de).into();
                                 let value;
                                 if let Some(v) = de.value_binary {
                                     value = DataEntryType::BinaryVal(v);
@@ -114,6 +123,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                                     key: de.key.clone(),
                                     height: de.height.clone(),
                                     value: value,
+                                    fragments: fragments,
                                 }
                             })
                             .collect(),
@@ -204,4 +214,51 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     }
 
     Ok(error.into_response())
+}
+
+impl From<&crate::data_entries::DataEntry> for Vec<DataEntryFragment> {
+    fn from(v: &crate::data_entries::DataEntry) -> Self {
+        let fragments = vec![
+            RawFragment(v.fragment_0_string.as_ref(), v.fragment_0_integer.as_ref()),
+            RawFragment(v.fragment_1_string.as_ref(), v.fragment_1_integer.as_ref()),
+            RawFragment(v.fragment_2_string.as_ref(), v.fragment_2_integer.as_ref()),
+            RawFragment(v.fragment_3_string.as_ref(), v.fragment_3_integer.as_ref()),
+            RawFragment(v.fragment_4_string.as_ref(), v.fragment_4_integer.as_ref()),
+            RawFragment(v.fragment_5_string.as_ref(), v.fragment_5_integer.as_ref()),
+            RawFragment(v.fragment_6_string.as_ref(), v.fragment_6_integer.as_ref()),
+            RawFragment(v.fragment_7_string.as_ref(), v.fragment_7_integer.as_ref()),
+            RawFragment(v.fragment_8_string.as_ref(), v.fragment_8_integer.as_ref()),
+            RawFragment(v.fragment_9_string.as_ref(), v.fragment_9_integer.as_ref()),
+            RawFragment(
+                v.fragment_10_string.as_ref(),
+                v.fragment_10_integer.as_ref(),
+            ),
+        ];
+        fragments
+            .into_iter()
+            .map(Into::into)
+            .take_while(|v: &Option<DataEntryFragment>| v.is_some())
+            .filter_map(|v| v)
+            .collect()
+    }
+}
+
+struct RawFragment<'a>(Option<&'a String>, Option<&'a i64>);
+
+impl<'a> From<RawFragment<'a>> for Option<DataEntryFragment> {
+    fn from(v: RawFragment) -> Self {
+        match v {
+            RawFragment(Some(string), _) => {
+                let fragment = DataEntryFragment::String {
+                    value: string.clone(),
+                };
+                Some(fragment)
+            }
+            RawFragment(_, Some(integer)) => {
+                let fragment = DataEntryFragment::Integer { value: *integer };
+                Some(fragment)
+            }
+            _ => None,
+        }
+    }
 }
