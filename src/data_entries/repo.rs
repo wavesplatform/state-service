@@ -33,9 +33,15 @@ impl DataEntriesRepo for DataEntriesRepoImpl {
         }
 
         diesel::sql_query(format!(
-            "SELECT de.address, de.key, bm.height, de.value_binary, de.value_bool, de.value_integer, de.value_string 
-            FROM data_entries de 
-            LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid 
+            "SELECT de.address, de.key, bm.height, de.value_binary, de.value_bool, de.value_integer, de.value_string, \
+            de.fragment_0_string, de.fragment_0_integer, de.fragment_1_string, de.fragment_1_integer, \
+            de.fragment_2_string, de.fragment_2_integer, de.fragment_3_string, de.fragment_3_integer, \
+            de.fragment_4_string, de.fragment_4_integer, de.fragment_5_string, de.fragment_5_integer, \
+            de.fragment_6_string, de.fragment_6_integer, de.fragment_7_string, de.fragment_7_integer, \
+            de.fragment_8_string, de.fragment_8_integer, de.fragment_9_string, de.fragment_9_integer, \
+            de.fragment_10_string, de.fragment_10_integer \
+            FROM data_entries de \
+            LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid \
             WHERE de.superseded_by = $1 AND (de.value_binary IS NOT NULL OR de.value_bool IS NOT NULL OR de.value_integer IS NOT NULL OR de.value_string IS NOT NULL) AND {} {} LIMIT {} OFFSET {}",
             query_where_string,
             query_sort_string,
