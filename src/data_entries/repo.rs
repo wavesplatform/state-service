@@ -39,7 +39,13 @@ impl DataEntriesRepo for DataEntriesRepoImpl {
             de.fragment_4_string, de.fragment_4_integer, de.fragment_5_string, de.fragment_5_integer, \
             de.fragment_6_string, de.fragment_6_integer, de.fragment_7_string, de.fragment_7_integer, \
             de.fragment_8_string, de.fragment_8_integer, de.fragment_9_string, de.fragment_9_integer, \
-            de.fragment_10_string, de.fragment_10_integer \
+            de.fragment_10_string, de.fragment_10_integer, \
+            de.value_fragment_0_string, de.value_fragment_0_integer, de.value_fragment_1_string, de.value_fragment_1_integer, \
+            de.value_fragment_2_string, de.value_fragment_2_integer, de.value_fragment_3_string, de.value_fragment_3_integer, \
+            de.value_fragment_4_string, de.value_fragment_4_integer, de.value_fragment_5_string, de.value_fragment_5_integer, \
+            de.value_fragment_6_string, de.value_fragment_6_integer, de.value_fragment_7_string, de.value_fragment_7_integer, \
+            de.value_fragment_8_string, de.value_fragment_8_integer, de.value_fragment_9_string, de.value_fragment_9_integer, \
+            de.value_fragment_10_string, de.value_fragment_10_integer \
             FROM data_entries de \
             LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid \
             WHERE de.superseded_by = $1 AND (de.value_binary IS NOT NULL OR de.value_bool IS NOT NULL OR de.value_integer IS NOT NULL OR de.value_string IS NOT NULL) AND {} {} LIMIT {} OFFSET {}",
