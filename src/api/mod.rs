@@ -2,7 +2,7 @@ mod errors;
 mod parsing;
 mod sql;
 
-use crate::data_entries::{repo::DataEntriesRepoImpl, DataEntriesRepo};
+use crate::data_entries::{self, repo::DataEntriesRepoImpl, DataEntriesRepo};
 use crate::log::APP_LOG;
 use errors::*;
 use parsing::SearchRequest;
@@ -50,11 +50,19 @@ pub struct DataEntry {
     height: i32,
     value: DataEntryType,
     fragments: Vec<DataEntryFragment>,
+    value_fragments: Vec<DataEntryValueFragment>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DataEntryFragment {
+    String { value: String },
+    Integer { value: i64 },
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DataEntryValueFragment {
     String { value: String },
     Integer { value: i64 },
 }
@@ -100,34 +108,14 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                     req.offset,
                 )
                 .and_then::<DataEntriesResponse, _>(|data_entries| {
+                    let has_next_page = data_entries.len() > req.limit as usize;
                     Ok(DataEntriesResponse {
                         entries: data_entries
-                            .clone()
                             .into_iter()
                             .take(req.limit as usize)
-                            .map(|de| {
-                                let fragments = (&de).into();
-                                let value;
-                                if let Some(v) = de.value_binary {
-                                    value = DataEntryType::BinaryVal(v);
-                                } else if let Some(v) = de.value_bool {
-                                    value = DataEntryType::BoolVal(v);
-                                } else if let Some(v) = de.value_integer {
-                                    value = DataEntryType::IntVal(v);
-                                } else {
-                                    // unwrap is safe because of data entry value is not null
-                                    value = DataEntryType::StringVal(de.value_string.unwrap());
-                                }
-                                DataEntry {
-                                    address: de.address.clone(),
-                                    key: de.key.clone(),
-                                    height: de.height.clone(),
-                                    value: value,
-                                    fragments: fragments,
-                                }
-                            })
+                            .map(|de| de.into())
                             .collect(),
-                        has_next_page: data_entries.len() > req.limit as usize,
+                        has_next_page,
                     })
                 })
                 .or_else::<Rejection, _>(|err| {
@@ -216,8 +204,34 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     Ok(error.into_response())
 }
 
-impl From<&crate::data_entries::DataEntry> for Vec<DataEntryFragment> {
-    fn from(v: &crate::data_entries::DataEntry) -> Self {
+impl From<data_entries::DataEntry> for DataEntry {
+    fn from(v: data_entries::DataEntry) -> Self {
+        let fragments = (&v).into();
+        let value_fragments = (&v).into();
+        let value;
+        if let Some(v) = v.value_binary {
+            value = DataEntryType::BinaryVal(v);
+        } else if let Some(v) = v.value_bool {
+            value = DataEntryType::BoolVal(v);
+        } else if let Some(v) = v.value_integer {
+            value = DataEntryType::IntVal(v);
+        } else {
+            // unwrap is safe because of data entry value is not null
+            value = DataEntryType::StringVal(v.value_string.unwrap());
+        }
+        DataEntry {
+            address: v.address.clone(),
+            key: v.key.clone(),
+            height: v.height.clone(),
+            value,
+            fragments,
+            value_fragments,
+        }
+    }
+}
+
+impl From<&data_entries::DataEntry> for Vec<DataEntryFragment> {
+    fn from(v: &data_entries::DataEntry) -> Self {
         let fragments = vec![
             RawFragment(v.fragment_0_string.as_ref(), v.fragment_0_integer.as_ref()),
             RawFragment(v.fragment_1_string.as_ref(), v.fragment_1_integer.as_ref()),
@@ -243,6 +257,63 @@ impl From<&crate::data_entries::DataEntry> for Vec<DataEntryFragment> {
     }
 }
 
+impl From<&data_entries::DataEntry> for Vec<DataEntryValueFragment> {
+    fn from(v: &data_entries::DataEntry) -> Self {
+        let value_fragments = vec![
+            RawFragment(
+                v.value_fragment_0_string.as_ref(),
+                v.value_fragment_0_integer.as_ref(),
+            ),
+            RawFragment(
+                v.value_fragment_1_string.as_ref(),
+                v.value_fragment_1_integer.as_ref(),
+            ),
+            RawFragment(
+                v.value_fragment_2_string.as_ref(),
+                v.value_fragment_2_integer.as_ref(),
+            ),
+            RawFragment(
+                v.value_fragment_3_string.as_ref(),
+                v.value_fragment_3_integer.as_ref(),
+            ),
+            RawFragment(
+                v.value_fragment_4_string.as_ref(),
+                v.value_fragment_4_integer.as_ref(),
+            ),
+            RawFragment(
+                v.value_fragment_5_string.as_ref(),
+                v.value_fragment_5_integer.as_ref(),
+            ),
+            RawFragment(
+                v.value_fragment_6_string.as_ref(),
+                v.value_fragment_6_integer.as_ref(),
+            ),
+            RawFragment(
+                v.value_fragment_7_string.as_ref(),
+                v.value_fragment_7_integer.as_ref(),
+            ),
+            RawFragment(
+                v.value_fragment_8_string.as_ref(),
+                v.value_fragment_8_integer.as_ref(),
+            ),
+            RawFragment(
+                v.value_fragment_9_string.as_ref(),
+                v.value_fragment_9_integer.as_ref(),
+            ),
+            RawFragment(
+                v.value_fragment_10_string.as_ref(),
+                v.value_fragment_10_integer.as_ref(),
+            ),
+        ];
+        value_fragments
+            .into_iter()
+            .map(Into::into)
+            .take_while(|v: &Option<DataEntryValueFragment>| v.is_some())
+            .filter_map(|v| v)
+            .collect()
+    }
+}
+
 struct RawFragment<'a>(Option<&'a String>, Option<&'a i64>);
 
 impl<'a> From<RawFragment<'a>> for Option<DataEntryFragment> {
@@ -256,6 +327,24 @@ impl<'a> From<RawFragment<'a>> for Option<DataEntryFragment> {
             }
             RawFragment(_, Some(integer)) => {
                 let fragment = DataEntryFragment::Integer { value: *integer };
+                Some(fragment)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl<'a> From<RawFragment<'a>> for Option<DataEntryValueFragment> {
+    fn from(v: RawFragment) -> Self {
+        match v {
+            RawFragment(Some(string), _) => {
+                let fragment = DataEntryValueFragment::String {
+                    value: string.clone(),
+                };
+                Some(fragment)
+            }
+            RawFragment(_, Some(integer)) => {
+                let fragment = DataEntryValueFragment::Integer { value: *integer };
                 Some(fragment)
             }
             _ => None,

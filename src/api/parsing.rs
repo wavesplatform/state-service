@@ -27,6 +27,7 @@ impl RequestFilter {
             RequestFilter::Or(filter) => filter.is_valid(context),
             RequestFilter::In(filter) => filter.is_valid(context),
             RequestFilter::Fragment(filter) => filter.is_valid(context),
+            RequestFilter::ValueFragment(filter) => filter.is_valid(context),
             RequestFilter::Key(filter) => filter.is_valid(context),
             RequestFilter::Value(filter) => filter.is_valid(context),
             RequestFilter::Address(filter) => filter.is_valid(context),
@@ -73,6 +74,39 @@ impl InFilter {
 impl FragmentFilter {
     fn is_valid(&self, context: String) -> Result<(), AppError> {
         let new_context = format!("{}fragment", context);
+        match self.value {
+            FragmentValueType::StringVal(_) => {
+                if self.operation == FragmentOperation::Eq {
+                    if let FragmentType::Integer = self.fragment_type {
+                        Err(AppError::new_validation_error(
+                            ValidationErrorCode::InvalidParamenterValue,
+                            ErrorDetails {
+                                parameter: new_context,
+                                reason: "`integer` fragment type requires `value` of integer type, found string."
+                                    .to_string(),
+                            },
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(AppError::new_validation_error(
+                        ValidationErrorCode::InvalidParamenterValue,
+                        ErrorDetails {
+                            parameter: new_context,
+                            reason: "String value type supports only `eq` operation.".to_string(),
+                        },
+                    ))
+                }
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+impl ValueFragmentFilter {
+    fn is_valid(&self, context: String) -> Result<(), AppError> {
+        let new_context = format!("{}value_fragment", context);
         match self.value {
             FragmentValueType::StringVal(_) => {
                 if self.operation == FragmentOperation::Eq {
@@ -177,6 +211,8 @@ pub enum RequestFilter {
     In(InFilter),
     #[serde(rename = "fragment")]
     Fragment(FragmentFilter),
+    #[serde(rename = "value_fragment")]
+    ValueFragment(ValueFragmentFilter),
     #[serde(rename = "key")]
     Key(KeyFilter),
     #[serde(rename = "value")]
@@ -193,6 +229,15 @@ pub struct OrFilter(pub Vec<RequestFilter>);
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct FragmentFilter {
+    #[serde(rename = "type")]
+    pub fragment_type: FragmentType,
+    pub position: u64,
+    pub operation: FragmentOperation,
+    pub value: FragmentValueType,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ValueFragmentFilter {
     #[serde(rename = "type")]
     pub fragment_type: FragmentType,
     pub position: u64,

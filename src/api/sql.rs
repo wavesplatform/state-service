@@ -1,7 +1,7 @@
 use super::parsing::{
     AddressFilter, AndFilter, FragmentFilter, FragmentOperation, FragmentType, FragmentValueType,
     InFilter, InItemFilter, KeyFilter, OrFilter, RequestFilter, RequestSort, SortItem,
-    SortItemDirection, ValueFilter, ValueType,
+    SortItemDirection, ValueFilter, ValueFragmentFilter, ValueType,
 };
 use crate::data_entries::{SqlSort, SqlWhere};
 use base64::encode;
@@ -53,6 +53,7 @@ impl From<RequestFilter> for SqlWhere {
             RequestFilter::Or(n) => n.into(),
             RequestFilter::In(n) => n.into(),
             RequestFilter::Fragment(n) => n.into(),
+            RequestFilter::ValueFragment(n) => n.into(),
             RequestFilter::Key(n) => n.into(),
             RequestFilter::Value(n) => n.into(),
             RequestFilter::Address(n) => n.into(),
@@ -141,6 +142,18 @@ impl From<FragmentFilter> for SqlWhere {
     fn from(v: FragmentFilter) -> Self {
         format!(
             "fragment_{}_{} {} {}",
+            v.position,
+            SqlWhere::from(v.fragment_type),
+            SqlWhere::from(v.operation),
+            SqlWhere::from(v.value)
+        )
+    }
+}
+
+impl From<ValueFragmentFilter> for SqlWhere {
+    fn from(v: ValueFragmentFilter) -> Self {
+        format!(
+            "value_fragment_{}_{} {} {}",
             v.position,
             SqlWhere::from(v.fragment_type),
             SqlWhere::from(v.operation),
