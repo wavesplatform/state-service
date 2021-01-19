@@ -57,13 +57,8 @@ impl InFilter {
     fn is_valid(&self, context: String) -> Result<(), AppError> {
         self.values.iter().try_fold(0, |idx, row| {
             if row.len() != self.properties.len() {
-                Err(AppError::new_validation_error(
-                    ValidationErrorCode::InvalidParamenterValue,
-                    ErrorDetails {
-                        parameter: format!("{}in", context),
-                        reason: format!("`values` row length at index {} is {}, while it should be equal to `properties` count ({}).", idx, row.len(), self.properties.len())
-                    },
-                ))
+                let reason = format!("`values` row length at index {} is {}, while it should be equal to `properties` count ({}).", idx, row.len(), self.properties.len());
+                Err(app_error(format!("{}in", context), reason))
             } else {
                 Ok(idx + 1)
             }
@@ -74,28 +69,34 @@ impl InFilter {
 impl FragmentFilter {
     fn is_valid(&self, context: String) -> Result<(), AppError> {
         let new_context = format!("{}fragment", context);
-        match self.value {
-            FragmentValueType::StringVal(_) => {
-                if self.operation == FragmentOperation::Eq {
-                    if let FragmentType::Integer = self.fragment_type {
-                        Err(AppError::new_validation_error(
-                            ValidationErrorCode::InvalidParamenterValue,
-                            ErrorDetails {
-                                parameter: new_context,
-                                reason: "`integer` fragment type requires `value` of integer type, found string."
-                                    .to_string(),
-                            },
-                        ))
-                    } else {
-                        Ok(())
-                    }
+        match self {
+            Self {
+                value: FragmentValueType::IntVal(_),
+                fragment_type: FragmentType::String,
+                ..
+            } => Err(app_error(
+                new_context,
+                "`string` fragment type requires `value` of string type, found integer.".into(),
+            )),
+            Self {
+                value: FragmentValueType::StringVal(_),
+                fragment_type: FragmentType::Integer,
+                ..
+            } => Err(app_error(
+                new_context,
+                "`integer` fragment type requires `value` of integer type, found string.".into(),
+            )),
+            Self {
+                fragment_type: FragmentType::String,
+                operation,
+                ..
+            } => {
+                if *operation == FragmentOperation::Eq {
+                    Ok(())
                 } else {
-                    Err(AppError::new_validation_error(
-                        ValidationErrorCode::InvalidParamenterValue,
-                        ErrorDetails {
-                            parameter: new_context,
-                            reason: "String value type supports only `eq` operation.".to_string(),
-                        },
+                    Err(app_error(
+                        new_context,
+                        "String value type supports only `eq` operation.".into(),
                     ))
                 }
             }
@@ -107,34 +108,47 @@ impl FragmentFilter {
 impl ValueFragmentFilter {
     fn is_valid(&self, context: String) -> Result<(), AppError> {
         let new_context = format!("{}value_fragment", context);
-        match self.value {
-            FragmentValueType::StringVal(_) => {
-                if self.operation == FragmentOperation::Eq {
-                    if let FragmentType::Integer = self.fragment_type {
-                        Err(AppError::new_validation_error(
-                            ValidationErrorCode::InvalidParamenterValue,
-                            ErrorDetails {
-                                parameter: new_context,
-                                reason: "`integer` fragment type requires `value` of integer type, found string."
-                                    .to_string(),
-                            },
-                        ))
-                    } else {
-                        Ok(())
-                    }
+        match self {
+            Self {
+                value: FragmentValueType::IntVal(_),
+                fragment_type: FragmentType::String,
+                ..
+            } => Err(app_error(
+                new_context,
+                "`string` fragment type requires `value` of string type, found integer.".into(),
+            )),
+            Self {
+                value: FragmentValueType::StringVal(_),
+                fragment_type: FragmentType::Integer,
+                ..
+            } => Err(app_error(
+                new_context,
+                "`integer` fragment type requires `value` of integer type, found string.".into(),
+            )),
+            Self {
+                fragment_type: FragmentType::String,
+                operation,
+                ..
+            } => {
+                if *operation == FragmentOperation::Eq {
+                    Ok(())
                 } else {
-                    Err(AppError::new_validation_error(
-                        ValidationErrorCode::InvalidParamenterValue,
-                        ErrorDetails {
-                            parameter: new_context,
-                            reason: "String value type supports only `eq` operation.".to_string(),
-                        },
+                    Err(app_error(
+                        new_context,
+                        "String value type supports only `eq` operation.".into(),
                     ))
                 }
             }
             _ => Ok(()),
         }
     }
+}
+
+fn app_error(parameter: String, reason: String) -> AppError {
+    AppError::new_validation_error(
+        ValidationErrorCode::InvalidParamenterValue,
+        ErrorDetails { parameter, reason },
+    )
 }
 
 impl KeyFilter {
