@@ -170,7 +170,12 @@ impl From<KeyFilter> for SqlWhere {
 
 impl From<ValueFilter> for SqlWhere {
     fn from(v: ValueFilter) -> Self {
-        format!("value = '{}'", v.value)
+        match v {
+            ValueFilter::Binary(v) => format!("value_binary = '{}'", encode(v)),
+            ValueFilter::String(v) => format!("value_string = '{}'", v),
+            ValueFilter::Bool(v) => format!("value_bool = {}", v),
+            ValueFilter::Integer(v) => format!("value_integer = {}", v),
+        }
     }
 }
 
