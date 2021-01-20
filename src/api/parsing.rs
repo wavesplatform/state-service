@@ -316,8 +316,12 @@ pub struct KeyFilter {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct ValueFilter {
-    pub value: String,
+#[serde(tag = "value_type", content = "value", rename_all = "lowercase")]
+pub enum ValueFilter {
+    String(String),
+    Binary(Vec<u8>),
+    Bool(bool),
+    Integer(i64),
 }
 
 #[derive(Clone, Debug, Deserialize)]
