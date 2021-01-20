@@ -11,6 +11,35 @@ pub struct SearchRequest {
     pub offset: u64,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct MgetEntries {
+    pub address_key_pairs: Vec<Entry>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Entry {
+    pub address: String,
+    pub key: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MgetByAddress {
+    pub keys: Vec<String>,
+}
+
+impl MgetEntries {
+    pub fn from_query_by_address(address: String, keys: Vec<String>) -> Self {
+        let address_key_pairs = keys
+            .into_iter()
+            .map(|key| Entry {
+                address: address.clone(),
+                key,
+            })
+            .collect();
+        Self { address_key_pairs }
+    }
+}
+
 impl SearchRequest {
     pub fn is_valid(&self) -> Result<(), AppError> {
         self.filter

@@ -1,6 +1,6 @@
 use super::parsing::{
     AddressFilter, AndFilter, FragmentFilter, FragmentOperation, FragmentType, FragmentValueType,
-    InFilter, InItemFilter, KeyFilter, OrFilter, RequestFilter, RequestSort, SortItem,
+    InFilter, InItemFilter, KeyFilter, MgetEntries, OrFilter, RequestFilter, RequestSort, SortItem,
     SortItemDirection, ValueFilter, ValueFragmentFilter, ValueType,
 };
 use crate::data_entries::{SqlSort, SqlWhere};
@@ -216,5 +216,15 @@ impl From<SortItemDirection> for SqlSort {
             SortItemDirection::Asc => "ASC".into(),
             SortItemDirection::Desc => "DESC".into(),
         }
+    }
+}
+
+impl From<MgetEntries> for SqlWhere {
+    fn from(v: MgetEntries) -> SqlWhere {
+        v.address_key_pairs
+            .into_iter()
+            .map(|entry| format!("(address = '{}' AND key = '{}')", entry.address, entry.key))
+            .collect::<Vec<_>>()
+            .join(" OR ")
     }
 }

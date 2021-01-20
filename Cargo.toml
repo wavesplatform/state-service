@@ -26,6 +26,7 @@ warp = "0.2"
 regex = "1"
 base64 = "0.12"
 thiserror = "1.0"
+serde_qs = "0.8"
 
 [[bin]]
 name = "service"
