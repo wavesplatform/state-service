@@ -151,3 +151,16 @@ impl From<serde_path_to_error::Error<serde_json::Error>> for AppError {
         }
     }
 }
+
+impl From<serde_qs::Error> for AppError {
+    fn from(e: serde_qs::Error) -> Self {
+        let reason = e.to_string();
+        Self::new_validation_error(
+            ValidationErrorCode::InvalidParamenterValue,
+            ErrorDetails {
+                parameter: "query".into(),
+                reason,
+            },
+        )
+    }
+}

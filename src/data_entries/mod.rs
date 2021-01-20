@@ -72,4 +72,6 @@ pub trait DataEntriesRepo {
         limit: u64,
         offset: u64,
     ) -> Result<Vec<DataEntry>, Error>;
+
+    fn mget_data_entries(&self, filter: impl Into<SqlWhere>) -> Result<Vec<DataEntry>, Error>;
 }

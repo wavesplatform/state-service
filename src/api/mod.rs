@@ -5,9 +5,10 @@ mod sql;
 use crate::data_entries::{self, repo::DataEntriesRepoImpl, DataEntriesRepo};
 use crate::log::APP_LOG;
 use errors::*;
-use parsing::SearchRequest;
+use parsing::{Entry, MgetByAddress, MgetEntries, SearchRequest};
 use serde::{Serialize, Serializer};
 use slog::{error, info};
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 use warp::http::StatusCode;
@@ -51,6 +52,12 @@ pub struct DataEntry {
     value: DataEntryType,
     fragments: Vec<DataEntryFragment>,
     value_fragments: Vec<DataEntryValueFragment>,
+}
+
+impl Reply for DataEntry {
+    fn into_response(self) -> Response {
+        json(&self).into_response()
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -127,12 +134,133 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
             },
         );
 
+    let mget_entries = warp::path::path("entries")
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json::<MgetEntries>())
+        .and(with_data_entries_repo.clone())
+        .and_then(
+            |req: MgetEntries, repo: Arc<DataEntriesRepoImpl>| async move {
+                let address_key_pairs = req.address_key_pairs.clone();
+                repo.mget_data_entries(req)
+                    .and_then(|data_entries| {
+                        let mut data_entries_map = data_entries
+                            .into_iter()
+                            .map(|de| {
+                                let key = (de.address.clone(), de.key.clone());
+                                let de = de.into();
+                                (key, de)
+                            })
+                            .collect::<HashMap<_, _>>();
+                        let result = address_key_pairs
+                            .into_iter()
+                            .map(|entry| {
+                                let k = &(entry.address, entry.key);
+                                data_entries_map.remove(k)
+                            })
+                            .collect::<Vec<Option<DataEntry>>>();
+                        Ok(MgetResponse(result))
+                    })
+                    .or_else::<Rejection, _>(|err| {
+                        Err(warp::reject::custom::<AppError>(
+                            AppError::DbError(err.to_string()).into(),
+                        )
+                        .into())
+                    })
+            },
+        );
+
+    let mget_by_address = warp::path!("entries" / String)
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(
+            warp::filters::query::raw().and_then(|query: String| async move {
+                serde_qs::from_str::<MgetByAddress>(query.as_str())
+                    .map_err(|err| warp::reject::custom::<AppError>(AppError::from(err)))
+            }),
+        )
+        .and(with_data_entries_repo.clone())
+        .and_then(
+            |address: String, query: MgetByAddress, repo: Arc<DataEntriesRepoImpl>| async move {
+                let keys = query.keys.clone();
+                let mget_entries = MgetEntries::from_query_by_address(address, query.keys);
+                repo.mget_data_entries(mget_entries)
+                    .and_then(|data_entries| {
+                        let mut data_entries_map = data_entries
+                            .into_iter()
+                            .map(|de| {
+                                let key = de.key.clone();
+                                let de = de.into();
+                                (key, de)
+                            })
+                            .collect::<HashMap<_, _>>();
+                        let result = keys
+                            .into_iter()
+                            .map(|key| data_entries_map.remove(&key))
+                            .collect::<Vec<Option<DataEntry>>>();
+                        Ok(MgetResponse(result))
+                    })
+                    .or_else::<Rejection, _>(|err| {
+                        Err(warp::reject::custom::<AppError>(
+                            AppError::DbError(err.to_string()).into(),
+                        )
+                        .into())
+                    })
+            },
+        );
+
+    let get_by_address_key = warp::path!("entries" / String / String)
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_data_entries_repo.clone())
+        .and_then(
+            |address: String, key: String, repo: Arc<DataEntriesRepoImpl>| async move {
+                let entry = Entry {
+                    address: address.clone(),
+                    key: key.clone(),
+                };
+                let mget_entries = MgetEntries {
+                    address_key_pairs: vec![entry],
+                };
+                repo.mget_data_entries(mget_entries)
+                    .or_else::<Rejection, _>(|err| {
+                        Err(warp::reject::custom::<AppError>(
+                            AppError::DbError(err.to_string()).into(),
+                        )
+                        .into())
+                    })
+                    .and_then(|data_entries| {
+                        if let Some(de) = data_entries.first() {
+                            Ok(DataEntry::from(de.clone()))
+                        } else {
+                            Err(warp::reject::not_found())
+                        }
+                    })
+            },
+        );
+
     let log = warp::log::custom(access_log);
 
     info!(APP_LOG, "Starting web server at 0.0.0.0:{}", port);
-    warp::serve(search.with(log).recover(handle_rejection))
-        .run(([0, 0, 0, 0], port))
-        .await
+    warp::serve(
+        search
+            .or(mget_entries)
+            .or(mget_by_address)
+            .or(get_by_address_key)
+            .with(log)
+            .recover(handle_rejection),
+    )
+    .run(([0, 0, 0, 0], port))
+    .await
+}
+
+#[derive(Debug, serde::Serialize)]
+struct MgetResponse(Vec<Option<DataEntry>>);
+
+impl Reply for MgetResponse {
+    fn into_response(self) -> Response {
+        json(&self.0).into_response()
+    }
 }
 
 fn access_log(info: warp::log::Info) {
@@ -219,7 +347,7 @@ impl From<data_entries::DataEntry> for DataEntry {
             // unwrap is safe because of data entry value is not null
             value = DataEntryType::StringVal(v.value_string.unwrap());
         }
-        DataEntry {
+        Self {
             address: v.address.clone(),
             key: v.key.clone(),
             height: v.height.clone(),
