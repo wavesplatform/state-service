@@ -50,7 +50,7 @@ pub struct DataEntry {
     key: String,
     height: i32,
     value: DataEntryType,
-    fragments: Vec<DataEntryFragment>,
+    key_fragments: Vec<DataEntryFragment>,
     value_fragments: Vec<DataEntryValueFragment>,
 }
 
@@ -334,7 +334,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
 
 impl From<data_entries::DataEntry> for DataEntry {
     fn from(v: data_entries::DataEntry) -> Self {
-        let fragments = (&v).into();
+        let key_fragments = (&v).into();
         let value_fragments = (&v).into();
         let value;
         if let Some(v) = v.value_binary {
@@ -352,7 +352,7 @@ impl From<data_entries::DataEntry> for DataEntry {
             key: v.key.clone(),
             height: v.height.clone(),
             value,
-            fragments,
+            key_fragments,
             value_fragments,
         }
     }
