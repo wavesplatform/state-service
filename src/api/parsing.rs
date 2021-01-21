@@ -252,7 +252,7 @@ pub enum RequestFilter {
     Or(OrFilter),
     #[serde(rename = "in")]
     In(InFilter),
-    #[serde(rename = "key_fragment")]
+    #[serde(rename = "fragment")]
     Fragment(KeyFragmentFilter),
     #[serde(rename = "value_fragment")]
     ValueFragment(ValueFragmentFilter),
