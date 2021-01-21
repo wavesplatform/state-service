@@ -1,7 +1,7 @@
 use super::parsing::{
-    AddressFilter, AndFilter, FragmentFilter, FragmentOperation, FragmentType, FragmentValueType,
-    InFilter, InItemFilter, KeyFilter, MgetEntries, OrFilter, RequestFilter, RequestSort, SortItem,
-    SortItemDirection, ValueFilter, ValueFragmentFilter, ValueType,
+    AddressFilter, AndFilter, FragmentOperation, FragmentType, FragmentValueType, InFilter,
+    InItemFilter, KeyFilter, KeyFragmentFilter, MgetEntries, OrFilter, RequestFilter, RequestSort,
+    SortItem, SortItemDirection, ValueFilter, ValueFragmentFilter, ValueType,
 };
 use crate::data_entries::{SqlSort, SqlWhere};
 use base64::encode;
@@ -138,8 +138,8 @@ impl From<InFilter> for SqlWhere {
     }
 }
 
-impl From<FragmentFilter> for SqlWhere {
-    fn from(v: FragmentFilter) -> Self {
+impl From<KeyFragmentFilter> for SqlWhere {
+    fn from(v: KeyFragmentFilter) -> Self {
         format!(
             "fragment_{}_{} {} {}",
             v.position,

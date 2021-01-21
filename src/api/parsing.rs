@@ -95,7 +95,7 @@ impl InFilter {
     }
 }
 
-impl FragmentFilter {
+impl KeyFragmentFilter {
     fn is_valid(&self, context: String) -> Result<(), AppError> {
         let new_context = format!("{}fragment", context);
         match self {
@@ -252,8 +252,8 @@ pub enum RequestFilter {
     Or(OrFilter),
     #[serde(rename = "in")]
     In(InFilter),
-    #[serde(rename = "fragment")]
-    Fragment(FragmentFilter),
+    #[serde(rename = "key_fragment")]
+    Fragment(KeyFragmentFilter),
     #[serde(rename = "value_fragment")]
     ValueFragment(ValueFragmentFilter),
     #[serde(rename = "key")]
@@ -271,7 +271,7 @@ pub struct AndFilter(pub Vec<RequestFilter>);
 pub struct OrFilter(pub Vec<RequestFilter>);
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct FragmentFilter {
+pub struct KeyFragmentFilter {
     #[serde(rename = "type")]
     pub fragment_type: FragmentType,
     pub position: u64,
