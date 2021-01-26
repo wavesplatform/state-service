@@ -1353,6 +1353,7 @@ dependencies = [
  "diesel",
  "envy",
  "once_cell",
+ "percent-encoding",
  "r2d2",
  "regex",
  "serde",

@@ -215,6 +215,7 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
         .and(with_data_entries_repo.clone())
         .and_then(
             |address: String, key: String, repo: Arc<DataEntriesRepoImpl>| async move {
+                let key = decode_uri_string(key)?;
                 let entry = Entry {
                     address: address.clone(),
                     key: key.clone(),
@@ -252,6 +253,15 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
     )
     .run(([0, 0, 0, 0], port))
     .await
+}
+
+fn decode_uri_string(s: String) -> Result<String, Rejection> {
+    percent_encoding::percent_decode(s.as_bytes())
+        .decode_utf8()
+        .map(|s| s.to_string())
+        .map_err(|error| {
+            warp::reject::custom::<AppError>(AppError::DecodePathError(error.to_string()))
+        })
 }
 
 #[derive(Debug, serde::Serialize)]

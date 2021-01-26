@@ -27,6 +27,7 @@ regex = "1"
 base64 = "0.12"
 thiserror = "1.0"
 serde_qs = "0.8"
+percent-encoding = "2.1"
 
 [[bin]]
 name = "service"
