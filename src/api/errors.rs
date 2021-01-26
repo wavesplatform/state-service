@@ -15,6 +15,7 @@ const INVALID_VALUE_RE: Lazy<Regex> =
 pub enum AppError {
     DbError(String),
     ValidationError(String, u32, Option<ErrorDetails>),
+    DecodePathError(String),
 }
 
 impl fmt::Display for AppError {
@@ -26,6 +27,7 @@ impl fmt::Display for AppError {
                 "ValidationError: message={} code={} details={:?}",
                 msg, code, details
             ),
+            AppError::DecodePathError(msg) => write!(f, "DecodePathError: {}", msg),
         }
     }
 }
