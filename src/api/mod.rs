@@ -50,8 +50,13 @@ pub struct DataEntry {
     key: String,
     height: i32,
     value: DataEntryType,
-    key_fragments: Vec<DataEntryFragment>,
-    value_fragments: Vec<DataEntryValueFragment>,
+    fragments: Fragments,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Fragments {
+    key: Vec<DataEntryFragment>,
+    value: Vec<DataEntryValueFragment>,
 }
 
 impl Reply for DataEntry {
@@ -152,14 +157,14 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                                 (key, de)
                             })
                             .collect::<HashMap<_, _>>();
-                        let result = address_key_pairs
+                        let entries = address_key_pairs
                             .into_iter()
                             .map(|entry| {
                                 let k = &(entry.address, entry.key);
                                 data_entries_map.remove(k)
                             })
                             .collect::<Vec<Option<DataEntry>>>();
-                        Ok(MgetResponse(result))
+                        Ok(MgetResponse { entries })
                     })
                     .or_else::<Rejection, _>(|err| {
                         Err(warp::reject::custom::<AppError>(
@@ -194,11 +199,11 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                                 (key, de)
                             })
                             .collect::<HashMap<_, _>>();
-                        let result = keys
+                        let entries = keys
                             .into_iter()
                             .map(|key| data_entries_map.remove(&key))
                             .collect::<Vec<Option<DataEntry>>>();
-                        Ok(MgetResponse(result))
+                        Ok(MgetResponse { entries })
                     })
                     .or_else::<Rejection, _>(|err| {
                         Err(warp::reject::custom::<AppError>(
@@ -264,12 +269,14 @@ fn decode_uri_string(s: String) -> Result<String, Rejection> {
         })
 }
 
-#[derive(Debug, serde::Serialize)]
-struct MgetResponse(Vec<Option<DataEntry>>);
+#[derive(Debug, Serialize)]
+struct MgetResponse {
+    entries: Vec<Option<DataEntry>>,
+}
 
 impl Reply for MgetResponse {
     fn into_response(self) -> Response {
-        json(&self.0).into_response()
+        json(&self).into_response()
     }
 }
 
@@ -357,13 +364,16 @@ impl From<data_entries::DataEntry> for DataEntry {
             // unwrap is safe because of data entry value is not null
             value = DataEntryType::StringVal(v.value_string.unwrap());
         }
+        let fragments = Fragments {
+            key: key_fragments,
+            value: value_fragments,
+        };
         Self {
             address: v.address.clone(),
             key: v.key.clone(),
             height: v.height.clone(),
             value,
-            key_fragments,
-            value_fragments,
+            fragments,
         }
     }
 }

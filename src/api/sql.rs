@@ -1,18 +1,19 @@
 use super::parsing::{
-    AddressFilter, AndFilter, FragmentOperation, FragmentType, FragmentValueType, InFilter,
-    InItemFilter, KeyFilter, KeyFragmentFilter, MgetEntries, OrFilter, RequestFilter, RequestSort,
-    SortItem, SortItemDirection, ValueFilter, ValueFragmentFilter, ValueType,
+    AddressFilter, AndFilter, FragmentType, FragmentValueType, InFilter, InFilterValue,
+    InItemFilter, KeyFilter, KeyFragmentFilter, MgetEntries, Operation, OrFilter, RequestFilter,
+    RequestSort, SortItem, SortItemDirection, ValueData, ValueFilter, ValueFragmentFilter,
+    ValueType,
 };
 use crate::data_entries::{SqlSort, SqlWhere};
 use base64::encode;
 
-impl From<ValueType> for SqlWhere {
-    fn from(v: ValueType) -> Self {
+impl From<InFilterValue> for SqlWhere {
+    fn from(v: InFilterValue) -> Self {
         match v {
-            ValueType::BinaryVal(b) => format!("'{}'", encode(b)),
-            ValueType::BoolVal(b) => format!("{}", b.to_owned()),
-            ValueType::IntVal(n) => format!("{}", n),
-            ValueType::StringVal(s) => format!("'{}'", s.to_owned()),
+            InFilterValue::BinaryVal(b) => format!("'{}'", encode(b)),
+            InFilterValue::BoolVal(b) => format!("{}", b.to_owned()),
+            InFilterValue::IntVal(n) => format!("{}", n),
+            InFilterValue::StringVal(s) => format!("'{}'", s.to_owned()),
         }
     }
 }
@@ -34,14 +35,14 @@ impl From<FragmentType> for SqlWhere {
     }
 }
 
-impl From<FragmentOperation> for SqlWhere {
-    fn from(v: FragmentOperation) -> Self {
+impl From<Operation> for SqlWhere {
+    fn from(v: Operation) -> Self {
         match v {
-            FragmentOperation::Eq => "=".into(),
-            FragmentOperation::Gt => ">".into(),
-            FragmentOperation::Gte => ">=".into(),
-            FragmentOperation::Lt => "<".into(),
-            FragmentOperation::Lte => "<=".into(),
+            Operation::Eq => "=".into(),
+            Operation::Gt => ">".into(),
+            Operation::Gte => ">=".into(),
+            Operation::Lt => "<".into(),
+            Operation::Lte => "<=".into(),
         }
     }
 }
@@ -101,7 +102,18 @@ impl From<InItemFilter> for SqlWhere {
                 fragment_type,
             } => format!("fragment_{}_{}", position, SqlWhere::from(fragment_type)),
             InItemFilter::Key {} => "key".into(),
-            InItemFilter::Value {} => "value".into(),
+            InItemFilter::Value {
+                value_type: ValueType::Binary,
+            } => "value_binary".into(),
+            InItemFilter::Value {
+                value_type: ValueType::Bool,
+            } => "value_bool".into(),
+            InItemFilter::Value {
+                value_type: ValueType::Integer,
+            } => "value_integer".into(),
+            InItemFilter::Value {
+                value_type: ValueType::String,
+            } => "value_string".into(),
             InItemFilter::Address {} => "address".into(),
         }
     }
@@ -171,19 +183,32 @@ impl From<KeyFilter> for SqlWhere {
 impl From<ValueFilter> for SqlWhere {
     fn from(v: ValueFilter) -> Self {
         match v {
-            ValueFilter::Binary(v) => {
+            ValueFilter {
+                value: ValueData::Binary(v),
+                ..
+            } => {
                 let v = encode(v);
                 format!(
                     "value_binary = '{}' AND md5(value_binary) = md5('{}')",
                     v, v
                 )
             }
-            ValueFilter::String(v) => format!(
+            ValueFilter {
+                value: ValueData::String(v),
+                ..
+            } => format!(
                 "value_string = '{}' AND md5(value_string) = md5('{}')",
                 v, v
             ),
-            ValueFilter::Bool(v) => format!("value_bool = {} AND value_bool IS NOT NULL", v),
-            ValueFilter::Integer(v) => format!("value_integer = {}", v),
+            ValueFilter {
+                value: ValueData::Bool(v),
+                ..
+            } => format!("value_bool = {} AND value_bool IS NOT NULL", v),
+            ValueFilter {
+                operation,
+                value: ValueData::Integer(v),
+                ..
+            } => format!("value_integer {} {}", SqlWhere::from(operation), v),
         }
     }
 }

@@ -2,6 +2,7 @@ use super::errors::{AppError, ErrorDetails, ValidationErrorCode};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SearchRequest {
     pub filter: Option<RequestFilter>,
     pub sort: Option<RequestSort>,
@@ -87,12 +88,60 @@ impl InFilter {
         self.values.iter().try_fold(0, |idx, row| {
             if row.len() != self.properties.len() {
                 let reason = format!("`values` row length at index {} is {}, while it should be equal to `properties` count ({}).", idx, row.len(), self.properties.len());
-                Err(app_error(format!("{}in", context), reason))
-            } else {
-                Ok(idx + 1)
+                return Err(app_error(format!("{}in", context), reason));
             }
+            for (index, key_value_pair) in self.properties.iter().zip(row.iter()).enumerate() {
+                match key_value_pair {
+                    (item @ InItemFilter::Fragment { fragment_type: FragmentType::Integer, .. }, InFilterValue::IntVal(_)) => {
+                        let context = format!("{}in[{}][{}]", context, idx, index);
+                        item.is_valid(context)?;
+                    }
+                    (item @ InItemFilter::Fragment { fragment_type: FragmentType::String, .. }, InFilterValue::StringVal(_)) => {
+                        let context = format!("{}in[{}][{}]", context, idx, index);
+                        item.is_valid(context)?;
+                    }
+                    (InItemFilter::Key {  }, InFilterValue::StringVal(_)) => {}
+                    (InItemFilter::Address {  }, InFilterValue::StringVal(_)) => {}
+                    (InItemFilter::Value { value_type: ValueType::Binary }, InFilterValue::BinaryVal(_)) => {}
+                    (InItemFilter::Value { value_type: ValueType::Bool }, InFilterValue::BoolVal(_)) => {}
+                    (InItemFilter::Value { value_type: ValueType::Integer }, InFilterValue::IntVal(_)) => {}
+                    (InItemFilter::Value { value_type: ValueType::String }, InFilterValue::StringVal(_)) => {}
+                    (filter, value) => {
+                        return in_item_filter_error(filter, value, &context, idx, index);
+                    }
+                }
+            };
+            Ok(idx + 1)
         }).map(|_| ())
     }
+}
+
+fn in_item_filter_error(
+    filter: &InItemFilter,
+    value: &InFilterValue,
+    context: &String,
+    idx: i32,
+    index: usize,
+) -> Result<i32, AppError> {
+    let base_type = filter.to_type();
+    let name = filter.to_name();
+    let current_type = value.to_type();
+    let reason = match filter {
+        InItemFilter::Address {} | InItemFilter::Key {} => {
+            format!(
+                "value of {} should be {}, found {}.",
+                name, base_type, current_type
+            )
+        }
+        _ => {
+            format!(
+                "`{}` {} type requires `value` of {} type, found {}.",
+                base_type, name, base_type, current_type
+            )
+        }
+    };
+    let parameter = format!("{}in.values[{}][{}]", context, idx, index);
+    Err(app_error(parameter, reason))
 }
 
 impl KeyFragmentFilter {
@@ -120,7 +169,7 @@ impl KeyFragmentFilter {
                 operation,
                 ..
             } => {
-                if *operation == FragmentOperation::Eq {
+                if *operation == Operation::Eq {
                     Ok(())
                 } else {
                     Err(app_error(
@@ -159,7 +208,7 @@ impl ValueFragmentFilter {
                 operation,
                 ..
             } => {
-                if *operation == FragmentOperation::Eq {
+                if *operation == Operation::Eq {
                     Ok(())
                 } else {
                     Err(app_error(
@@ -187,7 +236,74 @@ impl KeyFilter {
 }
 
 impl ValueFilter {
-    fn is_valid(&self, _: String) -> Result<(), AppError> {
+    fn is_valid(&self, context: String) -> Result<(), AppError> {
+        let new_context = format!("{}value", context);
+        self.valid_type(&new_context)?;
+        self.valid_operation(&new_context)?;
+        Ok(())
+    }
+
+    fn valid_type(&self, context: &String) -> Result<(), AppError> {
+        match self {
+            Self {
+                value_type: ValueType::String,
+                value: ValueData::String(_),
+                ..
+            } => {}
+            Self {
+                value_type: ValueType::Integer,
+                value: ValueData::Integer(_),
+                ..
+            } => {}
+            Self {
+                value_type: ValueType::Binary,
+                value: ValueData::Binary(_),
+                ..
+            } => {}
+            Self {
+                value_type: ValueType::Bool,
+                value: ValueData::Bool(_),
+                ..
+            } => {}
+            Self {
+                value_type, value, ..
+            } => {
+                let base_type = value_type.to_type();
+                let current_type = value.to_type();
+                let reason = format!(
+                    "`{}` value type requires `value` of {} type, found {}",
+                    base_type, base_type, current_type
+                );
+                return Err(app_error(context.to_owned(), reason));
+            }
+        }
+        Ok(())
+    }
+
+    fn valid_operation(&self, context: &String) -> Result<(), AppError> {
+        match self {
+            Self {
+                operation: Operation::Eq,
+                ..
+            } => {}
+            Self {
+                value_type: ValueType::Integer,
+                ..
+            } => {}
+            Self {
+                value_type,
+                operation,
+                ..
+            } => {
+                let base_type = value_type.to_type();
+                let op_type = operation.to_type();
+                let reason = format!(
+                    "`{}` value type support only `eq` operation, found {}",
+                    base_type, op_type
+                );
+                return Err(app_error(context.to_owned(), reason));
+            }
+        }
         Ok(())
     }
 }
@@ -215,7 +331,7 @@ pub enum FragmentValueType {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
-pub enum ValueType {
+pub enum InFilterValue {
     BinaryVal(Vec<u8>),
     BoolVal(bool),
     IntVal(i64),
@@ -231,7 +347,7 @@ pub enum FragmentType {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub enum FragmentOperation {
+pub enum Operation {
     #[serde(rename = "eq")]
     Eq,
     #[serde(rename = "gt")]
@@ -275,7 +391,7 @@ pub struct KeyFragmentFilter {
     #[serde(rename = "type")]
     pub fragment_type: FragmentType,
     pub position: u64,
-    pub operation: FragmentOperation,
+    pub operation: Operation,
     pub value: FragmentValueType,
 }
 
@@ -284,7 +400,7 @@ pub struct ValueFragmentFilter {
     #[serde(rename = "type")]
     pub fragment_type: FragmentType,
     pub position: u64,
-    pub operation: FragmentOperation,
+    pub operation: Operation,
     pub value: FragmentValueType,
 }
 
@@ -299,15 +415,51 @@ pub enum InItemFilter {
     #[serde(rename = "key")]
     Key {},
     #[serde(rename = "value")]
-    Value {},
+    Value {
+        #[serde(rename = "type")]
+        value_type: ValueType,
+    },
     #[serde(rename = "address")]
     Address {},
+}
+
+impl InItemFilter {
+    fn is_valid(&self, context: String) -> Result<(), AppError> {
+        match self {
+            InItemFilter::Fragment { position, .. } => {
+                if *position > 10 {
+                    let reason = "`position` out of range, should be less or equal than 10.".into();
+                    return Err(app_error(context, reason));
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn to_name(&self) -> String {
+        match self {
+            InItemFilter::Fragment { .. } => "fragment".to_string(),
+            InItemFilter::Key {} => "key".to_string(),
+            InItemFilter::Value { .. } => "value".to_string(),
+            InItemFilter::Address {} => "address".to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValueType {
+    String,
+    Integer,
+    Binary,
+    Bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct InFilter {
     pub properties: Vec<InItemFilter>,
-    pub values: Vec<Vec<ValueType>>,
+    pub values: Vec<Vec<InFilterValue>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -316,8 +468,16 @@ pub struct KeyFilter {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "value_type", content = "value", rename_all = "lowercase")]
-pub enum ValueFilter {
+pub struct ValueFilter {
+    #[serde(rename = "type")]
+    pub value_type: ValueType,
+    pub operation: Operation,
+    pub value: ValueData,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum ValueData {
     String(String),
     Binary(Vec<u8>),
     Bool(bool),
@@ -386,3 +546,72 @@ pub enum SortItem {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct RequestSort(pub Vec<SortItem>);
+
+pub trait ToType {
+    fn to_type(&self) -> String;
+}
+
+impl ToType for InItemFilter {
+    fn to_type(&self) -> String {
+        match self {
+            InItemFilter::Fragment { fragment_type, .. } => fragment_type.to_type(),
+            InItemFilter::Key {} => "string".to_string(),
+            InItemFilter::Value { value_type } => value_type.to_type(),
+            InItemFilter::Address {} => "string".to_string(),
+        }
+    }
+}
+
+impl ToType for FragmentType {
+    fn to_type(&self) -> String {
+        match self {
+            FragmentType::String => "string".to_string(),
+            FragmentType::Integer => "integer".to_string(),
+        }
+    }
+}
+
+impl ToType for ValueType {
+    fn to_type(&self) -> String {
+        match self {
+            ValueType::String => "string".to_string(),
+            ValueType::Integer => "integer".to_string(),
+            ValueType::Binary => "binary".to_string(),
+            ValueType::Bool => "bool".to_string(),
+        }
+    }
+}
+
+impl ToType for InFilterValue {
+    fn to_type(&self) -> String {
+        match self {
+            InFilterValue::BinaryVal(_) => "binary".to_string(),
+            InFilterValue::BoolVal(_) => "bool".to_string(),
+            InFilterValue::IntVal(_) => "integer".to_string(),
+            InFilterValue::StringVal(_) => "string".to_string(),
+        }
+    }
+}
+
+impl ToType for ValueData {
+    fn to_type(&self) -> String {
+        match self {
+            ValueData::String(_) => "string".to_string(),
+            ValueData::Binary(_) => "binary".to_string(),
+            ValueData::Bool(_) => "bool".to_string(),
+            ValueData::Integer(_) => "integer".to_string(),
+        }
+    }
+}
+
+impl ToType for Operation {
+    fn to_type(&self) -> String {
+        match self {
+            Operation::Eq => "eq".to_string(),
+            Operation::Gt => "gt".to_string(),
+            Operation::Gte => "gte".to_string(),
+            Operation::Lt => "lt".to_string(),
+            Operation::Lte => "lte".to_string(),
+        }
+    }
+}
