@@ -1,18 +1,19 @@
 use super::parsing::{
-    AddressFilter, AndFilter, FragmentFilter, FragmentOperation, FragmentType, FragmentValueType,
-    InFilter, InItemFilter, KeyFilter, OrFilter, RequestFilter, RequestSort, SortItem,
-    SortItemDirection, ValueFilter, ValueType,
+    AddressFilter, AndFilter, FragmentType, FragmentValueType, InFilter, InFilterValue,
+    InItemFilter, KeyFilter, KeyFragmentFilter, MgetEntries, Operation, OrFilter, RequestFilter,
+    RequestSort, SortItem, SortItemDirection, ValueData, ValueFilter, ValueFragmentFilter,
+    ValueType,
 };
 use crate::data_entries::{SqlSort, SqlWhere};
 use base64::encode;
 
-impl From<ValueType> for SqlWhere {
-    fn from(v: ValueType) -> Self {
+impl From<InFilterValue> for SqlWhere {
+    fn from(v: InFilterValue) -> Self {
         match v {
-            ValueType::BinaryVal(b) => format!("'{}'", encode(b)),
-            ValueType::BoolVal(b) => format!("{}", b.to_owned()),
-            ValueType::IntVal(n) => format!("{}", n),
-            ValueType::StringVal(s) => format!("'{}'", s.to_owned()),
+            InFilterValue::BinaryVal(b) => format!("'{}'", encode(b)),
+            InFilterValue::BoolVal(b) => format!("{}", b.to_owned()),
+            InFilterValue::IntVal(n) => format!("{}", n),
+            InFilterValue::StringVal(s) => format!("'{}'", s.to_owned()),
         }
     }
 }
@@ -34,14 +35,14 @@ impl From<FragmentType> for SqlWhere {
     }
 }
 
-impl From<FragmentOperation> for SqlWhere {
-    fn from(v: FragmentOperation) -> Self {
+impl From<Operation> for SqlWhere {
+    fn from(v: Operation) -> Self {
         match v {
-            FragmentOperation::Eq => "=".into(),
-            FragmentOperation::Gt => ">".into(),
-            FragmentOperation::Gte => ">=".into(),
-            FragmentOperation::Lt => "<".into(),
-            FragmentOperation::Lte => "<=".into(),
+            Operation::Eq => "=".into(),
+            Operation::Gt => ">".into(),
+            Operation::Gte => ">=".into(),
+            Operation::Lt => "<".into(),
+            Operation::Lte => "<=".into(),
         }
     }
 }
@@ -53,6 +54,7 @@ impl From<RequestFilter> for SqlWhere {
             RequestFilter::Or(n) => n.into(),
             RequestFilter::In(n) => n.into(),
             RequestFilter::Fragment(n) => n.into(),
+            RequestFilter::ValueFragment(n) => n.into(),
             RequestFilter::Key(n) => n.into(),
             RequestFilter::Value(n) => n.into(),
             RequestFilter::Address(n) => n.into(),
@@ -100,7 +102,18 @@ impl From<InItemFilter> for SqlWhere {
                 fragment_type,
             } => format!("fragment_{}_{}", position, SqlWhere::from(fragment_type)),
             InItemFilter::Key {} => "key".into(),
-            InItemFilter::Value {} => "value".into(),
+            InItemFilter::Value {
+                value_type: ValueType::Binary,
+            } => "value_binary".into(),
+            InItemFilter::Value {
+                value_type: ValueType::Bool,
+            } => "value_bool".into(),
+            InItemFilter::Value {
+                value_type: ValueType::Integer,
+            } => "value_integer".into(),
+            InItemFilter::Value {
+                value_type: ValueType::String,
+            } => "value_string".into(),
             InItemFilter::Address {} => "address".into(),
         }
     }
@@ -137,10 +150,22 @@ impl From<InFilter> for SqlWhere {
     }
 }
 
-impl From<FragmentFilter> for SqlWhere {
-    fn from(v: FragmentFilter) -> Self {
+impl From<KeyFragmentFilter> for SqlWhere {
+    fn from(v: KeyFragmentFilter) -> Self {
         format!(
             "fragment_{}_{} {} {}",
+            v.position,
+            SqlWhere::from(v.fragment_type),
+            SqlWhere::from(v.operation),
+            SqlWhere::from(v.value)
+        )
+    }
+}
+
+impl From<ValueFragmentFilter> for SqlWhere {
+    fn from(v: ValueFragmentFilter) -> Self {
+        format!(
+            "value_fragment_{}_{} {} {}",
             v.position,
             SqlWhere::from(v.fragment_type),
             SqlWhere::from(v.operation),
@@ -157,7 +182,34 @@ impl From<KeyFilter> for SqlWhere {
 
 impl From<ValueFilter> for SqlWhere {
     fn from(v: ValueFilter) -> Self {
-        format!("value = '{}'", v.value)
+        match v {
+            ValueFilter {
+                value: ValueData::Binary(v),
+                ..
+            } => {
+                let v = encode(v);
+                format!(
+                    "value_binary = '{}' AND md5(value_binary) = md5('{}')",
+                    v, v
+                )
+            }
+            ValueFilter {
+                value: ValueData::String(v),
+                ..
+            } => format!(
+                "value_string = '{}' AND md5(value_string) = md5('{}')",
+                v, v
+            ),
+            ValueFilter {
+                value: ValueData::Bool(v),
+                ..
+            } => format!("value_bool = {} AND value_bool IS NOT NULL", v),
+            ValueFilter {
+                operation,
+                value: ValueData::Integer(v),
+                ..
+            } => format!("value_integer {} {}", SqlWhere::from(operation), v),
+        }
     }
 }
 
@@ -203,5 +255,15 @@ impl From<SortItemDirection> for SqlSort {
             SortItemDirection::Asc => "ASC".into(),
             SortItemDirection::Desc => "DESC".into(),
         }
+    }
+}
+
+impl From<MgetEntries> for SqlWhere {
+    fn from(v: MgetEntries) -> SqlWhere {
+        v.address_key_pairs
+            .into_iter()
+            .map(|entry| format!("(address = '{}' AND key = '{}')", entry.address, entry.key))
+            .collect::<Vec<_>>()
+            .join(" OR ")
     }
 }
