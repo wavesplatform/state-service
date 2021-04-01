@@ -64,7 +64,7 @@ impl DataEntriesRepo for DataEntriesRepoImpl {
     fn mget_data_entries(&self, filter: impl Into<SqlWhere>) -> Result<Vec<DataEntry>, Error> {
         let query_filter_string: String = filter.into();
         if query_filter_string.len() > 0 {
-            diesel::sql_query(format!("{} AND {}", BASE_QUERY, query_filter_string))
+            diesel::sql_query(format!("{} AND ({})", BASE_QUERY, query_filter_string))
                 .bind::<diesel::sql_types::BigInt, _>(MAX_UID)
                 .get_results::<DataEntry>(&self.pool.get()?)
                 .map_err(|err| Error::DbError(err))
