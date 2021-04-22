@@ -11,23 +11,31 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_path_to_error = "0.1"
 envy = "0.4"
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 slog = "2.5"
 slog-term = "2.6"
 slog-async = "2.5"
 slog-json = "2.3"
+slog-envlogger = "2.2.0"
 async-trait = "0.1"
 once_cell = "1.4"
 diesel = { version = "1.4.5", features = ["postgres", "chrono", "r2d2", "numeric", "64-column-tables"] }
 chrono = { version = "0.4", features = ["serde"] }
 r2d2 = "0.8"
 bigdecimal = { version = "0.1.2", features = ["serde"] }
-warp = "0.2"
+warp = { version = "0.3", default-features = false }
 regex = "1"
 base64 = "0.12"
 thiserror = "1.0"
 serde_qs = "0.8"
 percent-encoding = "2.1"
+tracing = { version = "0.1.25", features = ["log-always"] }
+tracing-opentelemetry = "0.12.0"
+tracing-subscriber = { version = "0.2.7", default-features = false, features = ["env-filter", "registry", "fmt"] }
+tracing-futures = "0.2.5"
+opentelemetry = { version = "0.13", features = ["rt-tokio"] }
+opentelemetry-jaeger = "0.12"
+
 
 [[bin]]
 name = "service"
