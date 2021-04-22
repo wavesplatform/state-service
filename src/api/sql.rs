@@ -260,10 +260,13 @@ impl From<SortItemDirection> for SqlSort {
 
 impl From<MgetEntries> for SqlWhere {
     fn from(v: MgetEntries) -> SqlWhere {
-        v.address_key_pairs
-            .into_iter()
-            .map(|entry| format!("(address = '{}' AND key = '{}')", entry.address, entry.key))
-            .collect::<Vec<_>>()
-            .join(" OR ")
+        format!(
+            "(address, key) IN ({})",
+            v.address_key_pairs
+                .into_iter()
+                .map(|entry| format!("('{}', '{}')", entry.address, entry.key))
+                .collect::<Vec<_>>()
+                .join(",")
+        )
     }
 }
