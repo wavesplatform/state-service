@@ -1,7 +1,8 @@
-use crate::{config::PostgresConfig, error::Error};
 use diesel::pg::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use std::time::Duration;
+
+use crate::{config::PostgresConfig, error::Error};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
