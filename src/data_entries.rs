@@ -1,10 +1,11 @@
-use crate::db::PgPool;
-use crate::error::Error;
-use crate::schema::data_entries;
 use diesel::prelude::*;
 use diesel::sql_types::Integer;
 use tokio::task::block_in_place;
 use tracing::{info_span, instrument};
+
+use crate::db::PgPool;
+use crate::error::Error;
+use crate::schema::data_entries;
 
 pub type SqlWhere = String;
 pub type SqlSort = String;

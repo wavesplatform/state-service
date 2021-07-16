@@ -6,7 +6,6 @@ pub mod config;
 pub mod data_entries;
 pub mod db;
 pub mod error;
-pub mod log;
 pub mod schema;
 
 // tracing
@@ -17,22 +16,28 @@ use tracing_subscriber::prelude::*;
 async fn main() -> Result<(), error::Error> {
     let config = config::load()?;
 
-    global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+    let mut tracing_enabled = false;
 
-    let tracer = opentelemetry_jaeger::new_pipeline()
-        .with_service_name(format!(
-            "{}/state-service",
-            config.tracing.service_name_prefix
-        ))
-        .with_agent_endpoint(config.tracing.jaeger_agent_endpoint)
-        .install_batch(opentelemetry::runtime::Tokio)?;
+    if let (Some(service_name_prefix), Some(jaeger_agent_endpoint)) = (
+        config.tracing.service_name_prefix,
+        config.tracing.jaeger_agent_endpoint,
+    ) {
+        tracing_enabled = true;
+        println!("tracing enabled: {}, {}", service_name_prefix, jaeger_agent_endpoint);
+        global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
 
-    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-    let fmt_layer = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .finish();
+        let tracer = opentelemetry_jaeger::new_pipeline()
+            .with_service_name(format!("{}/state-service", service_name_prefix))
+            .with_agent_endpoint(jaeger_agent_endpoint)
+            .install_batch(opentelemetry::runtime::Tokio)?;
 
-    fmt_layer.with(opentelemetry).try_init()?;
+        let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+        let fmt_layer = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .finish();
+
+        fmt_layer.with(opentelemetry).try_init()?;
+    }
 
     let data_entries_repo = {
         let pg_pool = db::pool(&config.postgres)?;
@@ -41,7 +46,9 @@ async fn main() -> Result<(), error::Error> {
 
     api::start(config.port, data_entries_repo).await;
 
-    global::shutdown_tracer_provider();
+    if tracing_enabled {
+        global::shutdown_tracer_provider();
+    }
 
     Ok(())
 }

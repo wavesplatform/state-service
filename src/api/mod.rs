@@ -2,24 +2,24 @@ mod errors;
 mod parsing;
 mod sql;
 
-use crate::{data_entries, log::APP_LOG};
-use errors::*;
-use parsing::{Entry, MgetByAddress, MgetEntries, SearchRequest};
 use serde::{Serialize, Serializer};
-use slog::{error, info};
 use std::collections::HashMap;
-use std::convert::Infallible;
 use tracing::{instrument, trace_span};
-use warp::http::StatusCode;
 use warp::{
     reply::{json, Reply, Response},
     Filter, Rejection,
 };
+use wavesexchange_log::{error, info};
+use wavesexchange_warp::error::{
+    error_handler_with_serde_qs, handler, internal, timeout, validation,
+};
+use wavesexchange_warp::log::access;
 
-const NOT_FOUND_ERROR_MESSAGE: &str = "Not Found";
-const METHOD_NOT_ALLOWED_ERROR_MESSAGE: &str = "Method Not Allowed";
-const INTERNAL_SERVER_ERROR_MESSAGE: &str = "Internal Server Error";
-const BODY_DESERIALIZATION_ERROR_MESSAGE: &str = "Body Deserialization Error";
+use crate::data_entries;
+use errors::*;
+use parsing::{Entry, MgetByAddress, MgetEntries, SearchRequest};
+
+const ERROR_CODES_PREFIX: u16 = 95; // internal service
 
 #[derive(Clone, Debug)]
 enum DataEntryType {
@@ -107,6 +107,25 @@ pub async fn start(port: u16, repo: data_entries::Repo) {
         )
     });
 
+    let error_handler = handler(ERROR_CODES_PREFIX, |err| match err {
+        AppError::ValidationError(_error_message, _error_code, error_details) => {
+            validation::invalid_parameter(
+                ERROR_CODES_PREFIX,
+                error_details.to_owned().map(|details| details.into()),
+            )
+        }
+        errors::AppError::DbError(error_message)
+            if error_message == "canceling statement due to statement timeout" =>
+        {
+            error!("{:?}", err);
+            timeout(ERROR_CODES_PREFIX)
+        }
+        _ => {
+            error!("{:?}", err);
+            internal(ERROR_CODES_PREFIX)
+        }
+    });
+
     let search = warp::path::path("search")
         .and(warp::path::end())
         .and(warp::post())
@@ -135,12 +154,9 @@ pub async fn start(port: u16, repo: data_entries::Repo) {
     let mget_by_address = warp::path!("entries" / String)
         .and(warp::path::end())
         .and(warp::get())
-        .and(
-            warp::filters::query::raw().and_then(|query: String| async move {
-                serde_qs::from_str::<MgetByAddress>(query.as_str())
-                    .map_err(|err| warp::reject::custom::<AppError>(AppError::from(err)))
-            }),
-        )
+        .and(serde_qs::warp::query::<MgetByAddress>(
+            serde_qs::Config::new(5, false),
+        ))
         .and(with_repo.clone())
         .and_then(mget_by_address_handler);
 
@@ -150,15 +166,17 @@ pub async fn start(port: u16, repo: data_entries::Repo) {
         .and(with_repo.clone())
         .and_then(get_by_address_key_handler);
 
-    let log = warp::log::custom(access_log);
+    let log = warp::log::custom(access);
 
-    info!(APP_LOG, "Starting web server at 0.0.0.0:{}", port);
+    info!("Starting web server at 0.0.0.0:{}", port);
     warp::serve(
         search
             .or(mget_entries)
             .or(mget_by_address)
             .or(get_by_address_key)
-            .recover(handle_rejection)
+            .recover(move |rej| {
+                error_handler_with_serde_qs(ERROR_CODES_PREFIX, error_handler.clone())(rej)
+            })
             .with(request_tracing)
             .with(log),
     )
@@ -184,75 +202,6 @@ impl Reply for MgetResponse {
     fn into_response(self) -> Response {
         json(&self).into_response()
     }
-}
-
-fn access_log(info: warp::log::Info) {
-    let req_id = info
-        .request_headers()
-        .get("x-request-id")
-        .map(|h| h.to_str().unwrap_or(&""));
-
-    info!(
-        APP_LOG, "access log";
-        "path" => info.path(),
-        "method" => info.method().to_string(),
-        "status" => info.status().as_u16(),
-        "ua" => info.user_agent(),
-        "latency" => info.elapsed().as_millis(),
-        "req_id" => req_id,
-        "ip" => info.remote_addr().map(|a| format!("{}", a.ip())),
-        "protocol" => format!("{:?}", info.version())
-    );
-}
-
-// This function receives a `Rejection` and tries to return a custom
-// value, otherwise simply passes the rejection along.
-async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
-    let error: ErrorListResponse;
-
-    if err.is_not_found() {
-        error = ErrorListResponse::singleton(
-            NOT_FOUND_ERROR_MESSAGE.to_string(),
-            StatusCode::NOT_FOUND,
-        );
-    } else if let Some(_) = err.find::<warp::filters::body::BodyDeserializeError>() {
-        error = ErrorListResponse::singleton(
-            BODY_DESERIALIZATION_ERROR_MESSAGE.to_string(),
-            StatusCode::BAD_REQUEST,
-        );
-    } else if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {
-        error = ErrorListResponse::singleton(
-            METHOD_NOT_ALLOWED_ERROR_MESSAGE.to_string(),
-            StatusCode::METHOD_NOT_ALLOWED,
-        );
-    } else if let Some(err) = err.find::<warp::reject::InvalidQuery>() {
-        error =
-            ErrorListResponse::singleton(format!("{}.", err.to_string()), StatusCode::BAD_REQUEST);
-    } else if let Some(AppError::ValidationError(error_message, error_code, error_details)) =
-        err.find()
-    {
-        error = ErrorListResponse::new(
-            error_message.to_owned(),
-            StatusCode::BAD_REQUEST,
-            error_details.to_owned(),
-            Some(error_code.to_owned()),
-        );
-    } else if let Some(AppError::DbError(_)) = err.find() {
-        error!(APP_LOG, "DbError: {:?}", err);
-        error = ErrorListResponse::singleton(
-            INTERNAL_SERVER_ERROR_MESSAGE.to_string(),
-            StatusCode::INTERNAL_SERVER_ERROR,
-        );
-    } else {
-        // We should have expected this... Just log and say its a 500
-        error!(APP_LOG, "Unhandled rejection: {:?}", err);
-        error = ErrorListResponse::singleton(
-            INTERNAL_SERVER_ERROR_MESSAGE.to_string(),
-            StatusCode::INTERNAL_SERVER_ERROR,
-        );
-    }
-
-    Ok(error.into_response())
 }
 
 impl From<data_entries::DataEntry> for DataEntry {

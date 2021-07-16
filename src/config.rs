@@ -33,8 +33,8 @@ struct PostgresConfigFlat {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct TracingConfig {
-    pub service_name_prefix: String,
-    pub jaeger_agent_endpoint: String,
+    pub service_name_prefix: Option<String>,
+    pub jaeger_agent_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone)]
