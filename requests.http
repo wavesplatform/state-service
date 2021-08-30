@@ -1,0 +1,217 @@
+###
+http://localhost:8080/entries/3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw/$RESERVED_AMOUNT/?block_timestamp=2020-02-18T23:16:09Z
+###
+http://localhost:8080/entries/3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw/$RESERVED_AMOUNT/?height=1929637
+###
+http://localhost:8080/entries/3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw/$RESERVED_AMOUNT/?block_timestamp=2020-08-18T23:16:09Z
+###
+http://localhost:8080/entries/3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw/$RESERVED_AMOUNT/?height=2017867
+
+###
+http://localhost:8080/entries/3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw/$RESERVED_AMOUNT/
+
+###
+POST http://localhost:8080/entries/?block_timestamp=2019-11-18T23:16:09Z HTTP/1.1
+content-type: application/json
+
+{
+    "address_key_pairs": [
+      {"address":"3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw", "key":"$RESERVED_AMOUNT"},
+      {"address":"3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw", "key":"$GAME_NUM"},
+      {"address":"3P5Bfd58PPfNvBM2Hy8QfbcDqMeNtzg7KfP", "key":"price_index"}
+    ]
+}
+
+###
+POST http://localhost:8080/entries/?height=1801309 HTTP/1.1
+content-type: application/json
+
+{
+    "address_key_pairs": [
+      {"address":"3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw", "key":"$RESERVED_AMOUNT"},
+      {"address":"3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw", "key":"$GAME_NUM"},
+      {"address":"3P5Bfd58PPfNvBM2Hy8QfbcDqMeNtzg7KfP", "key":"price_index"}
+    ]
+}
+
+###
+POST http://localhost:8080/entries/?height=1801520 HTTP/1.1
+content-type: application/json
+
+{
+    "address_key_pairs": [
+      {"address":"3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw", "key":"$RESERVED_AMOUNT"},
+      {"address":"3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw", "key":"$GAME_NUM"},
+      {"address":"3P5Bfd58PPfNvBM2Hy8QfbcDqMeNtzg7KfP", "key":"price_index"}
+    ]
+}
+
+###Error
+POST http://localhost:8080/entries/?height=1801520&block_timestamp=2020-08-18T23:16:09Z HTTP/1.1
+content-type: application/json
+
+{
+    "address_key_pairs": [
+      {"address":"3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw", "key":"$RESERVED_AMOUNT"},
+      {"address":"3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw", "key":"$GAME_NUM"},
+      {"address":"3P5Bfd58PPfNvBM2Hy8QfbcDqMeNtzg7KfP", "key":"price_index"}
+    ]
+}
+
+###Error
+POST http://localhost:8080/entries/?block_timestamp=2020-08-18T23:16:09 HTTP/1.1
+content-type: application/json
+
+{
+    "address_key_pairs": [
+      {"address":"3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw", "key":"$RESERVED_AMOUNT"},
+      {"address":"3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw", "key":"$GAME_NUM"},
+      {"address":"3P5Bfd58PPfNvBM2Hy8QfbcDqMeNtzg7KfP", "key":"price_index"}
+    ]
+}
+
+###
+POST https://mainnet-dev.waves.exchange/api/v1/state/search
+Content-Type: application/json
+
+{"filter": {"address": {"operation": "eq", "value": "3PBSX4sRwoVc4Wgn46eaK9R1jGCFYSKnFRy"}}}
+
+###NotFound
+POST http://localhost:8080/entries/?block_timestamp=2019-11-18T23:16:09Z HTTP/1.1
+content-type: application/json
+
+{
+    "address_key_pairs": [
+      {"address":"3P8M\"'8XGF2uz'Da\\'z\\V5fzdKN  xrbC3YqCWScKxw", "key":"$RES  ERVE'D_AMOUNT"},
+      {"address":"3P8M8XGF2uzD  'azV5fzdKNxr  bC3YqCWScKxw", "key":"$GA M'E_NUM"},
+      {"address":"3P5Bfd58PPfNv'BM2Hy8Qfb cDqMeNtzg7KfP", "key":"pric\\'e_in  dex"}
+    ]
+}
+
+###
+POST http://localhost:8080/search
+Content-Type: application/json
+
+{
+  "filter": {
+    "address": {
+      "operation": "eq", 
+      "value": "3PBSX4sRwoVc\\'4Wgn46eaK9R1jGCFYSKnFRy"
+    }
+  }
+}
+
+###
+POST http://localhost:8080/search
+Content-Type: application/json
+
+{"filter":{"and":[{"address":{"operation":"eq","value":"3Mzt645zA6u2QG6jRPoo6H6CK89kVggFgNi"}},{"or":[{"key":{"operation":"eq","value":"%s%s\\'%'s__config__asset__DWgwcZTMhSvnyYCoWLRUXXSH1RSkzThXLJhww9gwkqdn"}},{"key":{"operation":"eq","value":"%s%s%d_\\'_shutd\\\"own__put__2"}}]}]}}
+
+###
+POST http://localhost:8080/search
+Content-Type: application/json
+
+{
+  "filter":{
+    "in":{
+      "properties":[
+        {"address":{}},
+        {
+          "fragment":{
+            "position":0,
+            "type":"string"
+          }
+        },
+        {"fragment":{"position":1,"type":"integer"}},
+        {"fragment":{"position":2,"type":"string"}}
+      ],
+      "values":[
+        ["3My9pmwLQ2CRvUXtT9f6B8E5rHAkqMnP4xs","P",0,"3Mz9N7YPfZPWGd4yYaX6H53Gcgrq6ifYiH7"],
+        ["3My9pmwLQ2CRvUXtT9f6B8E5rHAkqMnP4xs","G",0,"3Mz9N7YPfZPWGd4yYaX6H53Gcgrq6ifYiH7"],
+        ["3NC9wWawxuFG6a3sZdfckGwoMeVhLFjZFwH","P",1,"3Mz9N7YPfZPWGd4yYaX6H53Gcgrq6ifYiH7"],
+        ["3NC9wWawxuFG6a3sZdfckGwoMeVhLFjZFwH","G",1,"3Mz9N7YPfZPWGd4yYaX6H53Gcgrq6ifYiH7"]
+      ]
+    }
+  }
+}
+
+###
+POST http://localhost:8080/search
+Content-Type: application/json
+
+{
+  "filter":{
+    "in":{
+      "properties":[
+        {"address":{}},
+        {
+          "fragment":{
+            "position":0,
+            "type":"string"
+          }
+        },
+        {"fragment":{"position":1,"type":"integer"}},
+        {"fragment":{"position":2,"type":"string"}}
+      ],
+      "values":[
+        ["3My9pmwLQ2\\CRvUXtT9f6\\'B8E5rHAkqMnP4xs","P",0,"3Mz9N7YPfZPWGd4yYaX'6H53Gcgrq6ifYiH7"],
+        ["3My9pmwLQ2CRvUXtT9'f6B8E5rHAkqMnP4xs","G",0,"3Mz9N7YPfZPWGd4yYaX'6H53Gcgrq6ifYiH7"],
+        ["3NC9wWawxuFG6a3sZdfc'kGwoMeVhLFjZFwH","P",1,"3Mz9N7YPfZPWGd4yYaX'6H53Gcgrq6ifYiH7"],
+        ["3NC9wWawxuFG6a3sZdfck'GwoMeVhLFjZFwH","G",1,"3Mz9N7YPfZPWGd4yYa'X6H53Gcgrq6ifYiH7"]
+      ]
+    }
+  }
+}
+
+###
+POST http://localhost:8080/search
+Content-Type: application/json
+
+{
+  "filter":{
+    "in":{
+      "properties":[
+        {"address":{}},
+        {"key":{}}
+      ],
+      "values":[
+        ["3P8M8XGF2uzDazV5fzdKNxrbC3YqCWScKxw","%s%s%d__topup__currentIdx__0"],
+        ["3My9pmwLQ2CRvUXtT9f6B8E5rHAkqMnP4xs","%s%s%d__limits__remaining__0"],
+        ["3My9pmwLQ2CRvUXtT9f6B8E5rHAkqMnP4xs","%s%s%d__shutdown__put__0"],
+        ["3My9pmwLQ2CRvUXtT9f6B8E5rHAkqMnP4xs","%s%s%d__price__last__0"],
+        ["3My9pmwLQ2CRvUXtT9f6B8E5rHAkqMnP4xs","%s%s%s__config__asset__DWgwcZTMhSvnyYCoWLRUXXSH1RSkzThXLJhww9gwkqdn"],
+        ["3NC9wWawxuFG6a3sZdfckGwoMeVhLFjZFwH","%s%s%d__topup__currentIdx__1"],
+        ["3NC9wWawxuFG6a3sZdfckGwoMeVhLFjZFwH","%s%s%d__limits__remaining__1"],
+        ["3NC9wWawxuFG6a3sZdfckGwoMeVhLFjZFwH","%s%s%d__shutdown__put__1"],
+        ["3NC9wWawxuFG6a3sZdfckGwoMeVhLFjZFwH","%s%s%d__price__last__1"],
+        ["3NC9wWawxuFG6a3sZdfckGwoMeVhLFjZFwH","%s%s%s__config__asset__DWgwcZTMhSvnyYCoWLRUXXSH1RSkzThXJhww9gwkqdn"]
+      ]
+    }
+  }
+}
+###NotFound
+POST http://localhost:8080/search
+Content-Type: application/json
+
+{
+  "filter":{
+    "in":{
+      "properties":[
+        {"address":{}},
+        {"key":{}}
+      ],
+      "values":[
+        ["3My9pmwLQ2CRvUXtT9f6B8'E5rHAkqMnP4xs","%s%s%'d__topup__currentIdx__0"],
+        ["3My9pmwLQ2CRvUXtT9'f6B8E5rHAkqMnP4xs","%s%s'%d__limits__remaining__0"],
+        ["3My9pmwLQ2CRvUXtT9f6B8'E5rHAkqMnP4xs","%s%s%'d__shutdown__put__0"],
+        ["3My9pmwLQ2CRvUXtT9'f6B8E5rHAkqMnP4xs","%s%'s%d__price__last__0"],
+        ["3My9pmwLQ2CRvUXtT9f'6B8E5rHAkqMnP4xs","%s%s%s_'_config__asset__DWgwcZTMhSvnyYCoWLRUXXSH1RSkzThXLJhww9gwkqdn"],
+        ["3NC9wWawxuFG6'a3sZdfckGwoMeVhLFjZFwH","%s%s'%d__topup__currentId'x__1"],
+        ["3NC9wWawxu'FG6a3sZdfckGwoMeVhLFjZFwH","%s%'s%d__limits__remai'ning__1"],
+        ["3NC9wWawxuF'G6a3sZdfckGwoMeVhLFjZFwH","%s%s'%d__shutdown__put__1"],
+        ["3NC9wWawxuFG6a3sZdfckGwoMeVhLF'jZFwH","%s%s%d__price_'_last__1"],
+        ["3NC9wWaw'xuFG6a3sZdfckG\\'woMeVhLFjZFwH","%s\\'%s%s_'_config__asset__DWgwcZTMhSv'nyYCoWL\\RUXXSH1RSkzThX\\'Jhww9gwkqdn"]
+      ]
+    }
+  }
+}

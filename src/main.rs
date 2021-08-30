@@ -7,6 +7,7 @@ pub mod data_entries;
 pub mod db;
 pub mod error;
 pub mod schema;
+pub mod text_utils;
 
 // tracing
 use opentelemetry::global;
