@@ -6,6 +6,8 @@ use super::parsing::{
 };
 use crate::data_entries::{SqlSort, SqlWhere};
 use base64::encode;
+use crate::text_utils::pg_escape;
+use md5::compute as md5;
 
 impl From<InFilterValue> for SqlWhere {
     fn from(v: InFilterValue) -> Self {
@@ -127,11 +129,14 @@ impl From<InFilter> for SqlWhere {
             .into_iter()
             .map(|rows| {
                 rows.into_iter()
-                    .map(|vt| vt.into())
+                    .map(|vt| {
+                        let v : String = vt.into();
+                        pg_escape(v.trim_matches('\'')).into()
+                    })
                     .collect::<Vec<String>>()
-                    .join(",")
+                    .join("','")
             })
-            .map(|row| format!("({})", row))
+            .map(|row| format!("('{}')", row))
             .collect();
 
         if v.properties.len() > 0 && values.len() > 0 {
@@ -139,7 +144,10 @@ impl From<InFilter> for SqlWhere {
                 "(({}) IN ({}))",
                 v.properties
                     .iter()
-                    .map(|p| SqlWhere::from(p.to_owned()))
+                    .map(|p| {
+                        let v = SqlWhere::from(p.to_owned());
+                        pg_escape(&v.as_str()).into()
+                    })
                     .collect::<Vec<SqlWhere>>()
                     .join(","),
                 values.join(",")
@@ -176,7 +184,7 @@ impl From<ValueFragmentFilter> for SqlWhere {
 
 impl From<KeyFilter> for SqlWhere {
     fn from(v: KeyFilter) -> Self {
-        format!("key = '{}'", v.value)
+        format!("key = '{}'", pg_escape(v.value.as_str()))
     }
 }
 
@@ -197,8 +205,8 @@ impl From<ValueFilter> for SqlWhere {
                 value: ValueData::String(v),
                 ..
             } => format!(
-                "value_string = '{}' AND md5(value_string) = md5('{}')",
-                v, v
+                "value_string = '{}' AND md5(value_string) = '{:x}'",
+                pg_escape(&v.as_str()), md5(&v.as_str())
             ),
             ValueFilter {
                 value: ValueData::Bool(v),
@@ -215,7 +223,7 @@ impl From<ValueFilter> for SqlWhere {
 
 impl From<AddressFilter> for SqlWhere {
     fn from(v: AddressFilter) -> Self {
-        format!("address = '{}'", v.value)
+        format!("address = '{}'", pg_escape(&v.value.as_str()))
     }
 }
 
@@ -264,7 +272,7 @@ impl From<MgetEntries> for SqlWhere {
             "(address, key) IN ({})",
             v.address_key_pairs
                 .into_iter()
-                .map(|entry| format!("('{}', '{}')", entry.address, entry.key))
+                .map(|entry| format!("('{}', '{}')", pg_escape(entry.address.as_str()), pg_escape(entry.key.as_str())))
                 .collect::<Vec<_>>()
                 .join(",")
         )

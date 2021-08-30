@@ -1,4 +1,13 @@
 table! {
+    blocks_microblocks (id) {
+        uid -> Int8,
+        id -> Varchar,
+        height -> Int4,
+        time_stamp -> Nullable<Int8>,
+    }
+}
+
+table! {
     data_entries (superseded_by, address, key) {
         block_uid -> BigInt,
         transaction_id -> Varchar,

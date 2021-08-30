@@ -1,6 +1,7 @@
 mod errors;
-mod parsing;
+pub mod parsing;
 mod sql;
+pub mod historical;
 
 use serde::{Serialize, Serializer};
 use std::collections::HashMap;
@@ -18,6 +19,8 @@ use wavesexchange_warp::log::access;
 use crate::data_entries;
 use errors::*;
 use parsing::{Entry, MgetByAddress, MgetEntries, SearchRequest};
+use historical::HistoricalRequestParams;
+use itertools::Itertools;
 
 const ERROR_CODES_PREFIX: u16 = 95; // internal service
 
@@ -149,6 +152,7 @@ pub async fn start(port: u16, repo: data_entries::Repo) {
         .and(warp::post())
         .and(warp::body::json::<MgetEntries>())
         .and(with_repo.clone())
+        .and(warp::query::<HashMap<String, String>>())
         .and_then(mget_handler);
 
     let mget_by_address = warp::path!("entries" / String)
@@ -158,12 +162,14 @@ pub async fn start(port: u16, repo: data_entries::Repo) {
             serde_qs::Config::new(5, false),
         ))
         .and(with_repo.clone())
+        .and(warp::query::<HashMap<String, String>>())
         .and_then(mget_by_address_handler);
 
     let get_by_address_key = warp::path!("entries" / String / String)
         .and(warp::path::end())
         .and(warp::get())
         .and(with_repo.clone())
+        .and(warp::query::<HashMap<String, String>>())
         .and_then(get_by_address_key_handler);
 
     let log = warp::log::custom(access);
@@ -387,10 +393,25 @@ async fn search_handler(
 async fn mget_handler(
     req: MgetEntries,
     repo: data_entries::Repo,
+    get_params: HashMap<String, String>,
 ) -> Result<MgetResponse, Rejection> {
     let address_key_pairs = req.address_key_pairs.clone();
 
-    repo.mget_data_entries(req)
+    let hp = HistoricalRequestParams::from_hashmap(&get_params)?;
+    
+    let mget_entries = MgetEntries {
+        address_key_pairs: address_key_pairs.clone()
+    };
+
+    let e_uids = repo.find_entities_uids(&hp, &mget_entries)
+        .await
+        .or_else::<Rejection, _>(|err| {
+            Err(warp::reject::custom::<AppError>(AppError::DbError(err.to_string()).into()).into())
+    })?;
+
+    reject_if_empty_uids(&hp, &e_uids)?;
+
+    repo.mget_data_entries(req, build_historical_sql(&e_uids))
         .await
         .and_then(|data_entries| {
             let mut data_entries_map = data_entries
@@ -420,11 +441,22 @@ async fn mget_by_address_handler(
     address: String,
     query: MgetByAddress,
     repo: data_entries::Repo,
+    get_params: HashMap<String, String>,
 ) -> Result<MgetResponse, Rejection> {
     let keys = query.keys.clone();
     let mget_entries = MgetEntries::from_query_by_address(address, query.keys);
 
-    repo.mget_data_entries(mget_entries)
+    let hp = HistoricalRequestParams::from_hashmap(&get_params)?;
+
+    let e_uids = repo.find_entities_uids(&hp, &mget_entries)
+        .await
+        .or_else::<Rejection, _>(|err| {
+            Err(warp::reject::custom::<AppError>(AppError::DbError(err.to_string()).into()).into())
+    })?;
+
+    reject_if_empty_uids(&hp, &e_uids)?;
+
+    repo.mget_data_entries(mget_entries, build_historical_sql(&e_uids))
         .await
         .and_then(|data_entries| {
             let mut data_entries_map = data_entries
@@ -451,17 +483,30 @@ async fn get_by_address_key_handler(
     address: String,
     key: String,
     repo: data_entries::Repo,
+    get_params: HashMap<String, String>,
 ) -> Result<DataEntry, Rejection> {
+
+    let hp = HistoricalRequestParams::from_hashmap(&get_params)?;
+
     let key = decode_uri_string(key)?;
     let entry = Entry {
         address: address.clone(),
         key: key.clone(),
     };
+
     let mget_entries = MgetEntries {
         address_key_pairs: vec![entry],
     };
 
-    repo.mget_data_entries(mget_entries)
+    let e_uids = repo.find_entities_uids(&hp, &mget_entries)
+        .await
+        .or_else::<Rejection, _>(|err| {
+            Err(warp::reject::custom::<AppError>(AppError::DbError(err.to_string()).into()).into())
+    })?;
+
+    reject_if_empty_uids(&hp, &e_uids)?;
+
+    repo.mget_data_entries(mget_entries, build_historical_sql(&e_uids))
         .await
         .or_else::<Rejection, _>(|err| {
             Err(warp::reject::custom::<AppError>(AppError::DbError(err.to_string()).into()).into())
@@ -473,4 +518,24 @@ async fn get_by_address_key_handler(
                 Err(warp::reject::not_found())
             }
         })
+}
+
+fn reject_if_empty_uids(hp: &HistoricalRequestParams, uids: &Vec<i64>) -> Result<(), Rejection> {
+    if hp.is_empty() {
+        return Ok(());
+    }
+
+    if uids.is_empty() {
+        return Err(warp::reject::not_found());
+    }
+
+    Ok(())
+}
+
+fn build_historical_sql(uids: &Vec<i64>) -> String {
+    if uids.is_empty() {
+        " AND de.superseded_by = $1".to_string()
+    } else {
+        format!(" AND de.uid in ({}) AND $1 = $1", uids.iter().join(","))
+    }
 }
