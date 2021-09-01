@@ -2,25 +2,24 @@ mod errors;
 mod parsing;
 mod sql;
 
-use crate::data_entries::{self, repo::DataEntriesRepoImpl, DataEntriesRepo};
-use crate::log::APP_LOG;
-use errors::*;
-use parsing::{Entry, MgetByAddress, MgetEntries, SearchRequest};
 use serde::{Serialize, Serializer};
-use slog::{error, info};
 use std::collections::HashMap;
-use std::convert::Infallible;
-use std::sync::Arc;
-use warp::http::StatusCode;
+use tracing::{instrument, trace_span};
 use warp::{
     reply::{json, Reply, Response},
     Filter, Rejection,
 };
+use wavesexchange_log::{error, info};
+use wavesexchange_warp::error::{
+    error_handler_with_serde_qs, handler, internal, timeout, validation,
+};
+use wavesexchange_warp::log::access;
 
-const NOT_FOUND_ERROR_MESSAGE: &str = "Not Found";
-const METHOD_NOT_ALLOWED_ERROR_MESSAGE: &str = "Method Not Allowed";
-const INTERNAL_SERVER_ERROR_MESSAGE: &str = "Internal Server Error";
-const BODY_DESERIALIZATION_ERROR_MESSAGE: &str = "Body Deserialization Error";
+use crate::data_entries;
+use errors::*;
+use parsing::{Entry, MgetByAddress, MgetEntries, SearchRequest};
+
+const ERROR_CODES_PREFIX: u16 = 95; // internal service
 
 #[derive(Clone, Debug)]
 enum DataEntryType {
@@ -91,9 +90,41 @@ impl Reply for DataEntriesResponse {
     }
 }
 
-pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
-    let data_entries_repo = Arc::new(repo);
-    let with_data_entries_repo = warp::any().map(move || data_entries_repo.clone());
+pub async fn start(port: u16, repo: data_entries::Repo) {
+    let with_repo = warp::any().map(move || repo.clone());
+
+    let request_tracing = warp::trace(|info| {
+        let req_id = info
+            .request_headers()
+            .get("x-request-id")
+            .map(|h| h.to_str().unwrap_or_default())
+            .unwrap_or_default();
+        trace_span!(
+            "request",
+            method = %info.method(),
+            path = %info.path(),
+            req_id = %req_id,
+        )
+    });
+
+    let error_handler = handler(ERROR_CODES_PREFIX, |err| match err {
+        AppError::ValidationError(_error_message, _error_code, error_details) => {
+            validation::invalid_parameter(
+                ERROR_CODES_PREFIX,
+                error_details.to_owned().map(|details| details.into()),
+            )
+        }
+        errors::AppError::DbError(error_message)
+            if error_message == "canceling statement due to statement timeout" =>
+        {
+            error!("{:?}", err);
+            timeout(ERROR_CODES_PREFIX)
+        }
+        _ => {
+            error!("{:?}", err);
+            internal(ERROR_CODES_PREFIX)
+        }
+    });
 
     let search = warp::path::path("search")
         .and(warp::path::end())
@@ -110,151 +141,44 @@ pub async fn start(port: u16, repo: DataEntriesRepoImpl) {
                     })
             }),
         )
-        .and(with_data_entries_repo.clone())
-        .and_then(
-            |req: SearchRequest, repo: Arc<DataEntriesRepoImpl>| async move {
-                repo.search_data_entries(
-                    req.filter.clone(),
-                    req.sort.clone(),
-                    req.limit + 1,
-                    req.offset,
-                )
-                .and_then::<DataEntriesResponse, _>(|data_entries| {
-                    let has_next_page = data_entries.len() > req.limit as usize;
-                    Ok(DataEntriesResponse {
-                        entries: data_entries
-                            .into_iter()
-                            .take(req.limit as usize)
-                            .map(|de| de.into())
-                            .collect(),
-                        has_next_page,
-                    })
-                })
-                .or_else::<Rejection, _>(|err| {
-                    Err(
-                        warp::reject::custom::<AppError>(AppError::DbError(err.to_string()).into())
-                            .into(),
-                    )
-                })
-            },
-        );
+        .and(with_repo.clone())
+        .and_then(search_handler);
 
     let mget_entries = warp::path::path("entries")
         .and(warp::path::end())
         .and(warp::post())
         .and(warp::body::json::<MgetEntries>())
-        .and(with_data_entries_repo.clone())
-        .and_then(
-            |req: MgetEntries, repo: Arc<DataEntriesRepoImpl>| async move {
-                let address_key_pairs = req.address_key_pairs.clone();
-                repo.mget_data_entries(req)
-                    .and_then(|data_entries| {
-                        let mut data_entries_map = data_entries
-                            .into_iter()
-                            .map(|de| {
-                                let key = (de.address.clone(), de.key.clone());
-                                let de = de.into();
-                                (key, de)
-                            })
-                            .collect::<HashMap<_, _>>();
-                        let entries = address_key_pairs
-                            .into_iter()
-                            .map(|entry| {
-                                let k = &(entry.address, entry.key);
-                                data_entries_map.remove(k)
-                            })
-                            .collect::<Vec<Option<DataEntry>>>();
-                        Ok(MgetResponse { entries })
-                    })
-                    .or_else::<Rejection, _>(|err| {
-                        Err(warp::reject::custom::<AppError>(
-                            AppError::DbError(err.to_string()).into(),
-                        )
-                        .into())
-                    })
-            },
-        );
+        .and(with_repo.clone())
+        .and_then(mget_handler);
 
     let mget_by_address = warp::path!("entries" / String)
         .and(warp::path::end())
         .and(warp::get())
-        .and(
-            warp::filters::query::raw().and_then(|query: String| async move {
-                serde_qs::from_str::<MgetByAddress>(query.as_str())
-                    .map_err(|err| warp::reject::custom::<AppError>(AppError::from(err)))
-            }),
-        )
-        .and(with_data_entries_repo.clone())
-        .and_then(
-            |address: String, query: MgetByAddress, repo: Arc<DataEntriesRepoImpl>| async move {
-                let keys = query.keys.clone();
-                let mget_entries = MgetEntries::from_query_by_address(address, query.keys);
-                repo.mget_data_entries(mget_entries)
-                    .and_then(|data_entries| {
-                        let mut data_entries_map = data_entries
-                            .into_iter()
-                            .map(|de| {
-                                let key = de.key.clone();
-                                let de = de.into();
-                                (key, de)
-                            })
-                            .collect::<HashMap<_, _>>();
-                        let entries = keys
-                            .into_iter()
-                            .map(|key| data_entries_map.remove(&key))
-                            .collect::<Vec<Option<DataEntry>>>();
-                        Ok(MgetResponse { entries })
-                    })
-                    .or_else::<Rejection, _>(|err| {
-                        Err(warp::reject::custom::<AppError>(
-                            AppError::DbError(err.to_string()).into(),
-                        )
-                        .into())
-                    })
-            },
-        );
+        .and(serde_qs::warp::query::<MgetByAddress>(
+            serde_qs::Config::new(5, false),
+        ))
+        .and(with_repo.clone())
+        .and_then(mget_by_address_handler);
 
     let get_by_address_key = warp::path!("entries" / String / String)
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_data_entries_repo.clone())
-        .and_then(
-            |address: String, key: String, repo: Arc<DataEntriesRepoImpl>| async move {
-                let key = decode_uri_string(key)?;
-                let entry = Entry {
-                    address: address.clone(),
-                    key: key.clone(),
-                };
-                let mget_entries = MgetEntries {
-                    address_key_pairs: vec![entry],
-                };
-                repo.mget_data_entries(mget_entries)
-                    .or_else::<Rejection, _>(|err| {
-                        Err(warp::reject::custom::<AppError>(
-                            AppError::DbError(err.to_string()).into(),
-                        )
-                        .into())
-                    })
-                    .and_then(|data_entries| {
-                        if let Some(de) = data_entries.first() {
-                            Ok(DataEntry::from(de.clone()))
-                        } else {
-                            Err(warp::reject::not_found())
-                        }
-                    })
-            },
-        );
+        .and(with_repo.clone())
+        .and_then(get_by_address_key_handler);
 
-    let log = warp::log::custom(access_log);
+    let log = warp::log::custom(access);
 
-    info!(APP_LOG, "Starting web server at 0.0.0.0:{}", port);
+    info!("Starting web server at 0.0.0.0:{}", port);
     warp::serve(
         search
             .or(mget_entries)
             .or(mget_by_address)
             .or(get_by_address_key)
-            .with(log)
-            .recover(handle_rejection),
+            .recover(move |rej| {
+                error_handler_with_serde_qs(ERROR_CODES_PREFIX, error_handler.clone())(rej)
+            })
+            .with(request_tracing)
+            .with(log),
     )
     .run(([0, 0, 0, 0], port))
     .await
@@ -278,75 +202,6 @@ impl Reply for MgetResponse {
     fn into_response(self) -> Response {
         json(&self).into_response()
     }
-}
-
-fn access_log(info: warp::log::Info) {
-    let req_id = info
-        .request_headers()
-        .get("x-request-id")
-        .map(|h| h.to_str().unwrap_or(&""));
-
-    info!(
-        APP_LOG, "access log";
-        "path" => info.path(),
-        "method" => info.method().to_string(),
-        "status" => info.status().as_u16(),
-        "ua" => info.user_agent(),
-        "latency" => info.elapsed().as_millis(),
-        "req_id" => req_id,
-        "ip" => info.remote_addr().map(|a| format!("{}", a.ip())),
-        "protocol" => format!("{:?}", info.version())
-    );
-}
-
-// This function receives a `Rejection` and tries to return a custom
-// value, otherwise simply passes the rejection along.
-async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
-    let error: ErrorListResponse;
-
-    if err.is_not_found() {
-        error = ErrorListResponse::singleton(
-            NOT_FOUND_ERROR_MESSAGE.to_string(),
-            StatusCode::NOT_FOUND,
-        );
-    } else if let Some(_) = err.find::<warp::filters::body::BodyDeserializeError>() {
-        error = ErrorListResponse::singleton(
-            BODY_DESERIALIZATION_ERROR_MESSAGE.to_string(),
-            StatusCode::BAD_REQUEST,
-        );
-    } else if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {
-        error = ErrorListResponse::singleton(
-            METHOD_NOT_ALLOWED_ERROR_MESSAGE.to_string(),
-            StatusCode::METHOD_NOT_ALLOWED,
-        );
-    } else if let Some(err) = err.find::<warp::reject::InvalidQuery>() {
-        error =
-            ErrorListResponse::singleton(format!("{}.", err.to_string()), StatusCode::BAD_REQUEST);
-    } else if let Some(AppError::ValidationError(error_message, error_code, error_details)) =
-        err.find()
-    {
-        error = ErrorListResponse::new(
-            error_message.to_owned(),
-            StatusCode::BAD_REQUEST,
-            error_details.to_owned(),
-            Some(error_code.to_owned()),
-        );
-    } else if let Some(AppError::DbError(_)) = err.find() {
-        error!(APP_LOG, "DbError: {:?}", err);
-        error = ErrorListResponse::singleton(
-            INTERNAL_SERVER_ERROR_MESSAGE.to_string(),
-            StatusCode::INTERNAL_SERVER_ERROR,
-        );
-    } else {
-        // We should have expected this... Just log and say its a 500
-        error!(APP_LOG, "Unhandled rejection: {:?}", err);
-        error = ErrorListResponse::singleton(
-            INTERNAL_SERVER_ERROR_MESSAGE.to_string(),
-            StatusCode::INTERNAL_SERVER_ERROR,
-        );
-    }
-
-    Ok(error.into_response())
 }
 
 impl From<data_entries::DataEntry> for DataEntry {
@@ -498,4 +353,124 @@ impl<'a> From<RawFragment<'a>> for Option<DataEntryValueFragment> {
             _ => None,
         }
     }
+}
+
+#[instrument(skip(req, repo))]
+async fn search_handler(
+    req: SearchRequest,
+    repo: data_entries::Repo,
+) -> Result<DataEntriesResponse, Rejection> {
+    repo.search_data_entries(
+        req.filter.clone(),
+        req.sort.clone(),
+        req.limit + 1,
+        req.offset,
+    )
+    .await
+    .and_then::<DataEntriesResponse, _>(|data_entries| {
+        let has_next_page = data_entries.len() > req.limit as usize;
+        Ok(DataEntriesResponse {
+            entries: data_entries
+                .into_iter()
+                .take(req.limit as usize)
+                .map(|de| de.into())
+                .collect(),
+            has_next_page,
+        })
+    })
+    .or_else::<Rejection, _>(|err| {
+        Err(warp::reject::custom::<AppError>(AppError::DbError(err.to_string()).into()).into())
+    })
+}
+
+#[instrument(skip(req, repo))]
+async fn mget_handler(
+    req: MgetEntries,
+    repo: data_entries::Repo,
+) -> Result<MgetResponse, Rejection> {
+    let address_key_pairs = req.address_key_pairs.clone();
+
+    repo.mget_data_entries(req)
+        .await
+        .and_then(|data_entries| {
+            let mut data_entries_map = data_entries
+                .into_iter()
+                .map(|de| {
+                    let key = (de.address.clone(), de.key.clone());
+                    let de = de.into();
+                    (key, de)
+                })
+                .collect::<HashMap<_, _>>();
+            let entries = address_key_pairs
+                .into_iter()
+                .map(|entry| {
+                    let k = &(entry.address, entry.key);
+                    data_entries_map.remove(k)
+                })
+                .collect::<Vec<Option<DataEntry>>>();
+            Ok(MgetResponse { entries })
+        })
+        .or_else::<Rejection, _>(|err| {
+            Err(warp::reject::custom::<AppError>(AppError::DbError(err.to_string()).into()).into())
+        })
+}
+
+#[instrument(skip(query, repo))]
+async fn mget_by_address_handler(
+    address: String,
+    query: MgetByAddress,
+    repo: data_entries::Repo,
+) -> Result<MgetResponse, Rejection> {
+    let keys = query.keys.clone();
+    let mget_entries = MgetEntries::from_query_by_address(address, query.keys);
+
+    repo.mget_data_entries(mget_entries)
+        .await
+        .and_then(|data_entries| {
+            let mut data_entries_map = data_entries
+                .into_iter()
+                .map(|de| {
+                    let key = de.key.clone();
+                    let de = de.into();
+                    (key, de)
+                })
+                .collect::<HashMap<_, _>>();
+            let entries = keys
+                .into_iter()
+                .map(|key| data_entries_map.remove(&key))
+                .collect::<Vec<Option<DataEntry>>>();
+            Ok(MgetResponse { entries })
+        })
+        .or_else::<Rejection, _>(|err| {
+            Err(warp::reject::custom::<AppError>(AppError::DbError(err.to_string()).into()).into())
+        })
+}
+
+#[instrument(skip(repo))]
+async fn get_by_address_key_handler(
+    address: String,
+    key: String,
+    repo: data_entries::Repo,
+) -> Result<DataEntry, Rejection> {
+    let key = decode_uri_string(key)?;
+    let entry = Entry {
+        address: address.clone(),
+        key: key.clone(),
+    };
+    let mget_entries = MgetEntries {
+        address_key_pairs: vec![entry],
+    };
+
+    repo.mget_data_entries(mget_entries)
+        .await
+        .or_else::<Rejection, _>(|err| {
+            Err(warp::reject::custom::<AppError>(AppError::DbError(err.to_string()).into()).into())
+        })
+        .and_then(|data_entries| {
+            if let Some(de) = data_entries.first() {
+                Ok(DataEntry::from(de.clone()))
+            } else {
+                Err(warp::reject::not_found())
+            }
+        })
 }

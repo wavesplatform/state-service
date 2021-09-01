@@ -1,10 +1,9 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fmt;
-use warp::http::StatusCode;
 use warp::reject::Reject;
-use warp::reply::{json, with_status, Reply, Response};
 
 const VALIDATION_ERROR_TITLE: &str = "Validation Error";
 const MISSING_FIELD_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"missing field `(\w+)`").unwrap());
@@ -39,58 +38,6 @@ pub struct ErrorDetails {
     pub parameter: String,
     pub reason: String,
 }
-
-#[derive(Serialize, Debug, Clone)]
-struct Error {
-    message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    code: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    details: Option<ErrorDetails>,
-}
-
-#[derive(Serialize, Debug, Clone)]
-struct ErrorList {
-    errors: Vec<Error>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ErrorListResponse {
-    list: ErrorList,
-    status: StatusCode,
-}
-
-impl ErrorListResponse {
-    pub fn singleton(msg: String, status: StatusCode) -> Self {
-        Self::new(msg, status, None, None)
-    }
-
-    pub fn new(
-        msg: String,
-        status: StatusCode,
-        details: Option<ErrorDetails>,
-        code: Option<u32>,
-    ) -> Self {
-        Self {
-            list: ErrorList {
-                errors: vec![Error {
-                    message: msg,
-                    details: details,
-                    code: code,
-                }],
-            },
-            status,
-        }
-    }
-}
-
-impl Reply for ErrorListResponse {
-    fn into_response(self) -> Response {
-        with_status(json(&self.list), self.status).into_response()
-    }
-}
-
-impl Reject for ErrorListResponse {}
 
 pub enum ValidationErrorCode {
     MissingRequiredParameter = 950200,
@@ -164,5 +111,14 @@ impl From<serde_qs::Error> for AppError {
                 reason,
             },
         )
+    }
+}
+
+impl From<ErrorDetails> for HashMap<String, String> {
+    fn from(v: ErrorDetails) -> Self {
+        let mut hm = HashMap::with_capacity(2);
+        hm.insert("parameter".to_owned(), v.parameter);
+        hm.insert("reason".to_owned(), v.reason);
+        hm
     }
 }

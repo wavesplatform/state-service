@@ -17,8 +17,10 @@ fn default_pgpoolsize() -> u8 {
 struct ConfigFlat {
     #[serde(default = "default_port")]
     pub port: u16,
+}
 
-    // service's postgres
+#[derive(Deserialize, Debug, Clone)]
+struct PostgresConfigFlat {
     pub pghost: String,
     #[serde(default = "default_pgport")]
     pub pgport: u16,
@@ -29,10 +31,17 @@ struct ConfigFlat {
     pub pgpoolsize: u8,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct TracingConfig {
+    pub service_name_prefix: Option<String>,
+    pub jaeger_agent_endpoint: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub port: u16,
     pub postgres: PostgresConfig,
+    pub tracing: TracingConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -45,18 +54,23 @@ pub struct PostgresConfig {
     pub pool_size: u8,
 }
 
-pub fn load() -> Result<Config, Error> {
-    let config_flat = envy::from_env::<ConfigFlat>()?;
+impl From<PostgresConfigFlat> for PostgresConfig {
+    fn from(pgcf: PostgresConfigFlat) -> Self {
+        Self {
+            host: pgcf.pghost,
+            port: pgcf.pgport,
+            database: pgcf.pgdatabase,
+            user: pgcf.pguser,
+            password: pgcf.pgpassword,
+            pool_size: pgcf.pgpoolsize,
+        }
+    }
+}
 
+pub fn load() -> Result<Config, Error> {
     Ok(Config {
-        port: config_flat.port,
-        postgres: PostgresConfig {
-            host: config_flat.pghost,
-            port: config_flat.pgport,
-            database: config_flat.pgdatabase,
-            user: config_flat.pguser,
-            password: config_flat.pgpassword,
-            pool_size: config_flat.pgpoolsize,
-        },
+        port: envy::from_env::<ConfigFlat>()?.port,
+        postgres: envy::from_env::<PostgresConfigFlat>()?.into(),
+        tracing: envy::prefixed("TRACING__").from_env::<TracingConfig>()?,
     })
 }
