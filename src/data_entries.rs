@@ -120,7 +120,7 @@ impl Repo {
                 query_where_string = format!("AND {}", query_where_string);
             }
 
-            let mut query_sort_string: String = sort.map_or("".to_string(), |s| s.into());
+            let mut query_sort_string: String = sort.map_or("de.uid desc".to_string(), |s| s.into());
 
             if query_sort_string.len() > 0 {
                 query_sort_string = format!("ORDER BY {}", query_sort_string);
@@ -135,7 +135,7 @@ impl Repo {
                 BASE_QUERY, query_where_string, query_sort_string, limit, offset
             );
 
-           //println!("{}", sql);
+           println!("{}", sql);
 
             diesel::sql_query(&sql)
             .bind::<diesel::sql_types::BigInt, _>(MAX_UID)
