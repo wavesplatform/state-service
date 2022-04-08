@@ -22,7 +22,7 @@ COPY --from=cacher /app/target target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
 RUN cargo build --release --bin service
 
-FROM debian:stretch as runtime
+FROM debian:11-slim as runtime
 WORKDIR app
 RUN apt-get update && apt-get install -y curl openssl libssl-dev libpq-dev
 RUN /usr/sbin/update-ca-certificates
