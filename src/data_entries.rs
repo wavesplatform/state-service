@@ -81,7 +81,7 @@ const MAX_UID: i64 = std::i64::MAX - 1;
 
 const BASE_QUERY: &str = "SELECT de.uid FROM data_entries de WHERE (de.value_binary IS NOT NULL OR de.value_bool IS NOT NULL OR de.value_integer IS NOT NULL OR de.value_string IS NOT NULL) ";
 
-const BASE_QUERY_FIELDS: &str = " de.address, de.key, bm.height, de.value_binary, de.value_bool, de.value_integer, de.value_string, \
+const BASE_QUERY_FIELDS: &str = " de.uid, de.address, de.key, bm.height, de.value_binary, de.value_bool, de.value_integer, de.value_string, \
 de.fragment_0_string, de.fragment_0_integer, de.fragment_1_string, de.fragment_1_integer, \
 de.fragment_2_string, de.fragment_2_integer, de.fragment_3_string, de.fragment_3_integer, \
 de.fragment_4_string, de.fragment_4_integer, de.fragment_5_string, de.fragment_5_integer, \
@@ -145,9 +145,9 @@ impl Repo {
                     LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid 
                     WHERE de.uid in (select uid from entries_uids)
                 )
-                select * from entries_data
+                select * from entries_data de {}
             ",
-                sql, BASE_QUERY_FIELDS
+                sql, BASE_QUERY_FIELDS, query_sort_string
             );
 
             //println!("{}", total_sql);
@@ -178,9 +178,24 @@ impl Repo {
                     BASE_QUERY, query_filter_string, historical_filter
                 );
 
-                //println!("sql:{}; $1={}", sql, MAX_UID);
+                let total_sql = format!(
+                    "
+                with entries_uids as (
+                    {}
+                ), 
+                entries_data as (
+                    select {} 
+                    FROM data_entries de 
+                    LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid 
+                    WHERE de.uid in (select uid from entries_uids)
+                )
+                select * from entries_data ",
+                    sql, BASE_QUERY_FIELDS
+                );
 
-                diesel::sql_query(&sql)
+                //println!("{}", total_sql);
+
+                diesel::sql_query(&total_sql)
                     .bind::<diesel::sql_types::BigInt, _>(MAX_UID)
                     .get_results::<DataEntry>(conn)
                     .map_err(|err| Error::DbError(err))
