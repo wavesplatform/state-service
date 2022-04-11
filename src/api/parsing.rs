@@ -1,6 +1,8 @@
 use super::errors::{AppError, ErrorDetails, ValidationErrorCode};
 use serde::Deserialize;
 
+const LIMIT_MAX: u64 = 1000;
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SearchRequest {
@@ -43,6 +45,12 @@ impl MgetEntries {
 
 impl SearchRequest {
     pub fn is_valid(&self) -> Result<(), AppError> {
+        if self.limit > LIMIT_MAX {
+            return Err(app_error(
+                "limit".into(),
+                format!("maximum value {} exceeded", LIMIT_MAX),
+            ));
+        }
         self.filter
             .as_ref()
             .map(|f| f.is_valid("filter.".to_string()))

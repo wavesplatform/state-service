@@ -3,12 +3,12 @@ use diesel::sql_types::Integer;
 use tokio::task::block_in_place;
 use tracing::{info_span, instrument};
 
+use crate::api::historical::HistoricalRequestParams;
+use crate::api::parsing::MgetEntries;
 use crate::db::PgPool;
 use crate::error::Error;
-use crate::schema::data_entries;
 use crate::schema::blocks_microblocks;
-use crate::api::historical::HistoricalRequestParams;
-use crate::api::parsing::{MgetEntries};
+use crate::schema::data_entries;
 use crate::text_utils::pg_escape;
 
 pub type SqlWhere = String;
@@ -17,7 +17,7 @@ pub type SqlSort = String;
 #[derive(Clone, Debug, QueryableByName)]
 #[table_name = "blocks_microblocks"]
 struct BlockMicroblock {
-    uid: i64
+    uid: i64,
 }
 
 #[derive(Clone, Debug, QueryableByName)]
@@ -79,7 +79,9 @@ pub struct DataEntry {
 
 const MAX_UID: i64 = std::i64::MAX - 1;
 
-const BASE_QUERY: &str = "SELECT de.address, de.key, bm.height, de.value_binary, de.value_bool, de.value_integer, de.value_string, \
+const BASE_WHERE: &str = " WHERE (de.value_binary IS NOT NULL OR de.value_bool IS NOT NULL OR de.value_integer IS NOT NULL OR de.value_string IS NOT NULL) ";
+
+const BASE_QUERY_FIELDS: &str = " de.uid, de.address, de.key, bm.height, de.value_binary, de.value_bool, de.value_integer, de.value_string, \
 de.fragment_0_string, de.fragment_0_integer, de.fragment_1_string, de.fragment_1_integer, \
 de.fragment_2_string, de.fragment_2_integer, de.fragment_3_string, de.fragment_3_integer, \
 de.fragment_4_string, de.fragment_4_integer, de.fragment_5_string, de.fragment_5_integer, \
@@ -91,10 +93,7 @@ de.value_fragment_2_string, de.value_fragment_2_integer, de.value_fragment_3_str
 de.value_fragment_4_string, de.value_fragment_4_integer, de.value_fragment_5_string, de.value_fragment_5_integer, \
 de.value_fragment_6_string, de.value_fragment_6_integer, de.value_fragment_7_string, de.value_fragment_7_integer, \
 de.value_fragment_8_string, de.value_fragment_8_integer, de.value_fragment_9_string, de.value_fragment_9_integer, \
-de.value_fragment_10_string, de.value_fragment_10_integer \
-FROM data_entries de \
-LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid \
-WHERE (de.value_binary IS NOT NULL OR de.value_bool IS NOT NULL OR de.value_integer IS NOT NULL OR de.value_string IS NOT NULL) ";
+de.value_fragment_10_string, de.value_fragment_10_integer ";
 
 #[derive(Clone)]
 pub struct Repo {
@@ -120,7 +119,7 @@ impl Repo {
                 query_where_string = format!("AND {}", query_where_string);
             }
 
-            let mut query_sort_string: String = sort.map_or("de.uid desc".to_string(), |s| s.into());
+            let mut query_sort_string: String = sort.map_or("de.uid asc".to_string(), |s| s.into());
 
             if query_sort_string.len() > 0 {
                 query_sort_string = format!("ORDER BY {}", query_sort_string);
@@ -131,16 +130,25 @@ impl Repo {
             let _g1 = info_span!("db_query").entered();
 
             let sql = format!(
-                "{} AND de.superseded_by = $1 {} {} LIMIT {} OFFSET {}",
-                BASE_QUERY, query_where_string, query_sort_string, limit, offset
+                "
+                with entries_uids as (
+                    select de.uid FROM data_entries de {} AND de.superseded_by = $1 {} {} LIMIT {} OFFSET {}
+                ), 
+                entries_data as (
+                    select {} 
+                    FROM data_entries de 
+                    LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid 
+                    WHERE de.uid in (select uid from entries_uids)
+                )
+                select * from entries_data de {}
+            ",
+                BASE_WHERE, query_where_string, query_sort_string, limit, offset, BASE_QUERY_FIELDS, query_sort_string
             );
 
-           println!("{}", sql);
-
             diesel::sql_query(&sql)
-            .bind::<diesel::sql_types::BigInt, _>(MAX_UID)
-            .get_results::<DataEntry>(conn)
-            .map_err(|err| Error::DbError(err))
+                .bind::<diesel::sql_types::BigInt, _>(MAX_UID)
+                .get_results::<DataEntry>(conn)
+                .map_err(|err| Error::DbError(err))
         })
     }
 
@@ -157,10 +165,11 @@ impl Repo {
                 let _g0 = info_span!("db_conn").entered();
                 let conn = &self.pg_pool.get()?;
                 let _g1 = info_span!("db_query").entered();
-                
-                let sql = format!("{} AND ({}) {}", BASE_QUERY, query_filter_string, historical_filter);
-                
-                //println!("sql:{}; $1={}", sql, MAX_UID);
+
+                let sql = format!(
+                    "select {} FROM data_entries de LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid {} AND ({}) {}",
+                    BASE_QUERY_FIELDS, BASE_WHERE, query_filter_string, historical_filter
+                );
 
                 diesel::sql_query(&sql)
                     .bind::<diesel::sql_types::BigInt, _>(MAX_UID)
@@ -172,7 +181,11 @@ impl Repo {
         })
     }
 
-    pub async fn find_entities_uids(&self, hp: &HistoricalRequestParams, entries: &MgetEntries) -> Result<Vec<i64>, Error> {
+    pub async fn find_entities_uids(
+        &self,
+        hp: &HistoricalRequestParams,
+        entries: &MgetEntries,
+    ) -> Result<Vec<i64>, Error> {
         if hp.is_empty() {
             return Ok(vec![]);
         }
@@ -180,7 +193,7 @@ impl Repo {
         block_in_place(|| {
             let mut uids = vec![];
             let mut sqls: Vec<String> = vec![];
-            
+
             entries.address_key_pairs.iter().map(|e,| {
                     if hp.height.is_some() {
                         sqls.push(
@@ -203,28 +216,29 @@ impl Repo {
                     }
 
             }).count();
-            
-            if ! sqls.is_empty() {
+
+            if !sqls.is_empty() {
                 //println!("history sqls: {:#?}", sqls);
 
                 let _g0 = info_span!("db_conn").entered();
                 let conn = &self.pg_pool.get()?;
                 let _g1 = info_span!("db_query").entered();
-                
 
                 let v = match hp.height {
-                    Some(h) => diesel::sql_query(sqls.join(" union ")).bind::<diesel::sql_types::BigInt, _>(h),
+                    Some(h) => diesel::sql_query(sqls.join(" union "))
+                        .bind::<diesel::sql_types::BigInt, _>(h),
                     None => {
                         let t = hp.block_timestamp.unwrap().timestamp();
-                        diesel::sql_query(sqls.join(" union ")).bind::<diesel::sql_types::BigInt, _>(t)
+                        diesel::sql_query(sqls.join(" union "))
+                            .bind::<diesel::sql_types::BigInt, _>(t)
                     }
                 };
 
-                let r = v.get_results::<BlockMicroblock>(conn)
-                .map_err(|err| Error::DbError(err))?;
+                let r = v
+                    .get_results::<BlockMicroblock>(conn)
+                    .map_err(|err| Error::DbError(err))?;
 
-                uids = r.iter().map(|e|{e.uid}).collect();
-                
+                uids = r.iter().map(|e| e.uid).collect();
             }
 
             Ok(uids)
