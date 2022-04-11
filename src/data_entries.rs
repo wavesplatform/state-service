@@ -79,7 +79,7 @@ pub struct DataEntry {
 
 const MAX_UID: i64 = std::i64::MAX - 1;
 
-const BASE_QUERY: &str = "SELECT de.uid FROM data_entries de WHERE (de.value_binary IS NOT NULL OR de.value_bool IS NOT NULL OR de.value_integer IS NOT NULL OR de.value_string IS NOT NULL) ";
+const BASE_WHERE: &str = " WHERE (de.value_binary IS NOT NULL OR de.value_bool IS NOT NULL OR de.value_integer IS NOT NULL OR de.value_string IS NOT NULL) ";
 
 const BASE_QUERY_FIELDS: &str = " de.uid, de.address, de.key, bm.height, de.value_binary, de.value_bool, de.value_integer, de.value_string, \
 de.fragment_0_string, de.fragment_0_integer, de.fragment_1_string, de.fragment_1_integer, \
@@ -130,14 +130,9 @@ impl Repo {
             let _g1 = info_span!("db_query").entered();
 
             let sql = format!(
-                "{} AND de.superseded_by = $1 {} {} LIMIT {} OFFSET {}",
-                BASE_QUERY, query_where_string, query_sort_string, limit, offset
-            );
-
-            let total_sql = format!(
                 "
                 with entries_uids as (
-                    {}
+                    select de.uid FROM data_entries de {} AND de.superseded_by = $1 {} {} LIMIT {} OFFSET {}
                 ), 
                 entries_data as (
                     select {} 
@@ -147,12 +142,10 @@ impl Repo {
                 )
                 select * from entries_data de {}
             ",
-                sql, BASE_QUERY_FIELDS, query_sort_string
+                BASE_WHERE, query_where_string, query_sort_string, limit, offset, BASE_QUERY_FIELDS, query_sort_string
             );
 
-            //println!("{}", total_sql);
-
-            diesel::sql_query(&total_sql)
+            diesel::sql_query(&sql)
                 .bind::<diesel::sql_types::BigInt, _>(MAX_UID)
                 .get_results::<DataEntry>(conn)
                 .map_err(|err| Error::DbError(err))
@@ -174,28 +167,11 @@ impl Repo {
                 let _g1 = info_span!("db_query").entered();
 
                 let sql = format!(
-                    "{} AND ({}) {}",
-                    BASE_QUERY, query_filter_string, historical_filter
+                    "select {} FROM data_entries de LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid {} AND ({}) {}",
+                    BASE_QUERY_FIELDS, BASE_WHERE, query_filter_string, historical_filter
                 );
 
-                let total_sql = format!(
-                    "
-                with entries_uids as (
-                    {}
-                ), 
-                entries_data as (
-                    select {} 
-                    FROM data_entries de 
-                    LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid 
-                    WHERE de.uid in (select uid from entries_uids)
-                )
-                select * from entries_data ",
-                    sql, BASE_QUERY_FIELDS
-                );
-
-                //println!("{}", total_sql);
-
-                diesel::sql_query(&total_sql)
+                diesel::sql_query(&sql)
                     .bind::<diesel::sql_types::BigInt, _>(MAX_UID)
                     .get_results::<DataEntry>(conn)
                     .map_err(|err| Error::DbError(err))
