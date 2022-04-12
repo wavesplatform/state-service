@@ -1,7 +1,7 @@
 use super::errors::{AppError, ErrorDetails, ValidationErrorCode};
 use serde::Deserialize;
 
-const LIMIT_MAX: u64 = 10000;
+const LIMIT_MAX: u64 = 5000;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
