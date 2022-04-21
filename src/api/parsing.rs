@@ -550,6 +550,8 @@ pub enum SortItem {
     Value { direction: SortItemDirection },
     #[serde(rename = "address")]
     Address { direction: SortItemDirection },
+    #[serde(rename = "uid")]
+    Uid { direction: SortItemDirection },
 }
 
 #[derive(Clone, Debug, Deserialize)]
