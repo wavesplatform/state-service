@@ -254,7 +254,7 @@ impl From<SortItem> for SqlSort {
             SortItem::Key { direction } => format!("key {}", SqlSort::from(direction)),
             SortItem::Value { direction } => format!("value {}", SqlSort::from(direction)),
             SortItem::Address { direction } => format!("address {}", SqlSort::from(direction)),
-            SortItem::Uid { direction } => format!("uid {}", SqlSort::from(direction)),
+            SortItem::Base { direction } => format!("uid {}", SqlSort::from(direction)),
         }
     }
 }
