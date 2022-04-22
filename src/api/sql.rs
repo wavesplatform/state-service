@@ -5,8 +5,8 @@ use super::parsing::{
     ValueType,
 };
 use crate::data_entries::{SqlSort, SqlWhere};
-use base64::encode;
 use crate::text_utils::pg_escape;
+use base64::encode;
 use md5::compute as md5;
 
 impl From<InFilterValue> for SqlWhere {
@@ -130,7 +130,7 @@ impl From<InFilter> for SqlWhere {
             .map(|rows| {
                 rows.into_iter()
                     .map(|vt| {
-                        let v : String = vt.into();
+                        let v: String = vt.into();
                         pg_escape(v.trim_matches('\'')).into()
                     })
                     .collect::<Vec<String>>()
@@ -206,7 +206,8 @@ impl From<ValueFilter> for SqlWhere {
                 ..
             } => format!(
                 "value_string = '{}' AND md5(value_string) = '{:x}'",
-                pg_escape(&v.as_str()), md5(&v.as_str())
+                pg_escape(&v.as_str()),
+                md5(&v.as_str())
             ),
             ValueFilter {
                 value: ValueData::Bool(v),
@@ -253,6 +254,7 @@ impl From<SortItem> for SqlSort {
             SortItem::Key { direction } => format!("key {}", SqlSort::from(direction)),
             SortItem::Value { direction } => format!("value {}", SqlSort::from(direction)),
             SortItem::Address { direction } => format!("address {}", SqlSort::from(direction)),
+            SortItem::Base { direction } => format!("uid {}", SqlSort::from(direction)),
         }
     }
 }
@@ -272,7 +274,11 @@ impl From<MgetEntries> for SqlWhere {
             "(address, key) IN ({})",
             v.address_key_pairs
                 .into_iter()
-                .map(|entry| format!("('{}', '{}')", pg_escape(entry.address.as_str()), pg_escape(entry.key.as_str())))
+                .map(|entry| format!(
+                    "('{}', '{}')",
+                    pg_escape(entry.address.as_str()),
+                    pg_escape(entry.key.as_str())
+                ))
                 .collect::<Vec<_>>()
                 .join(",")
         )
