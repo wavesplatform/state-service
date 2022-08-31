@@ -553,6 +553,13 @@ pub enum SortItem {
     //default order by data_entries.uid
     #[serde(rename = "base")]
     Base { direction: SortItemDirection },
+    #[serde(rename = "value_fragment")]
+    ValueFragment {
+        position: u64,
+        #[serde(rename = "type")]
+        fragment_type: FragmentType,
+        direction: SortItemDirection,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
