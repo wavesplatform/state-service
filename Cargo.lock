@@ -1295,7 +1295,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "warp",
- "wavesexchange_log 0.3.0 (git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_log/0.3.0)",
+ "wavesexchange_log 0.3.0",
  "wavesexchange_warp",
 ]
 
@@ -1795,8 +1795,8 @@ dependencies = [
 
 [[package]]
 name = "wavesexchange_log"
-version = "0.3.0"
-source = "git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_warp/0.11.0#f214a002a13c82a12ac74fe30312b24e9a2070d7"
+version = "0.5.0"
+source = "git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_warp/0.13.1#5fd451d328f014a05a6e7b6eee4caef2e7c87f0e"
 dependencies = [
  "chrono",
  "once_cell",
@@ -1809,8 +1809,8 @@ dependencies = [
 
 [[package]]
 name = "wavesexchange_warp"
-version = "0.11.0"
-source = "git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_warp/0.11.0#f214a002a13c82a12ac74fe30312b24e9a2070d7"
+version = "0.13.1"
+source = "git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_warp/0.13.1#5fd451d328f014a05a6e7b6eee4caef2e7c87f0e"
 dependencies = [
  "futures",
  "once_cell",
@@ -1818,7 +1818,7 @@ dependencies = [
  "serde_json",
  "serde_qs",
  "warp",
- "wavesexchange_log 0.3.0 (git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_warp/0.11.0)",
+ "wavesexchange_log 0.5.0",
 ]
 
 [[package]]
