@@ -1,4 +1,4 @@
-FROM rust:1.59 as planner
+FROM rust:1.64 as planner
 WORKDIR app
 # We only pay the installation cost once, 
 # it will be cached from the second build onwards
