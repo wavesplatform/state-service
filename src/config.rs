@@ -13,10 +13,16 @@ fn default_pgpoolsize() -> u8 {
     4
 }
 
+fn default_metrics_port() -> u16 {
+    9090
+}
+
 #[derive(Deserialize, Debug, Clone)]
 struct ConfigFlat {
     #[serde(default = "default_port")]
-    pub port: u16,
+    port: u16,
+    #[serde(default = "default_metrics_port")]
+    metrics_port: u16,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -40,6 +46,7 @@ pub struct TracingConfig {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub port: u16,
+    pub metrics_port: u16,
     pub postgres: PostgresConfig,
     pub tracing: TracingConfig,
 }
@@ -68,8 +75,10 @@ impl From<PostgresConfigFlat> for PostgresConfig {
 }
 
 pub fn load() -> Result<Config, Error> {
+    let config_flat = envy::from_env::<ConfigFlat>()?;
     Ok(Config {
-        port: envy::from_env::<ConfigFlat>()?.port,
+        port: config_flat.port,
+        metrics_port: config_flat.metrics_port,
         postgres: envy::from_env::<PostgresConfigFlat>()?.into(),
         tracing: envy::prefixed("TRACING__").from_env::<TracingConfig>()?,
     })

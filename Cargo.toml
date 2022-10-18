@@ -31,7 +31,7 @@ tracing-futures = "0.2.5"
 opentelemetry = { version = "0.13", features = ["rt-tokio"] }
 opentelemetry-jaeger = "0.12"
 wavesexchange_log = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_log/0.3.0" }
-wavesexchange_warp = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_warp/0.14.0", version = "0.14.0" }
+wavesexchange_warp = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_warp/0.14.1"}
 itertools = "0.10.1"
 md5 = "0.7.0"
 

@@ -45,7 +45,7 @@ async fn main() -> Result<(), error::Error> {
         data_entries::Repo::new(pg_pool)
     };
 
-    api::start(config.port, data_entries_repo).await;
+    api::start(config.port, config.metrics, data_entries_repo).await;
 
     if tracing_enabled {
         global::shutdown_tracer_provider();
