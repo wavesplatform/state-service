@@ -5,16 +5,16 @@ fn default_port() -> u16 {
     8080
 }
 
+fn default_metrics_port() -> u16 {
+    9090
+}
+
 fn default_pgport() -> u16 {
     5432
 }
 
 fn default_pgpoolsize() -> u8 {
     4
-}
-
-fn default_metrics_port() -> u16 {
-    9090
 }
 
 #[derive(Deserialize, Debug, Clone)]
