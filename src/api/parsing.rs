@@ -194,6 +194,7 @@ impl KeyFragmentFilter {
 impl ValueFragmentFilter {
     fn is_valid(&self, context: String) -> Result<(), AppError> {
         let new_context = format!("{}value_fragment", context);
+
         match self {
             Self {
                 value: FragmentValueType::IntVal(_),
@@ -553,6 +554,13 @@ pub enum SortItem {
     //default order by data_entries.uid
     #[serde(rename = "base")]
     Base { direction: SortItemDirection },
+    #[serde(rename = "value_fragment")]
+    ValueFragment {
+        position: u64,
+        #[serde(rename = "type")]
+        fragment_type: FragmentType,
+        direction: SortItemDirection,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
