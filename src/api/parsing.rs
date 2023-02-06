@@ -194,6 +194,7 @@ impl KeyFragmentFilter {
 impl ValueFragmentFilter {
     fn is_valid(&self, context: String) -> Result<(), AppError> {
         let new_context = format!("{}value_fragment", context);
+
         match self {
             Self {
                 value: FragmentValueType::IntVal(_),

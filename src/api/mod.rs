@@ -15,13 +15,13 @@ use wavesexchange_warp::error::{
     error_handler_with_serde_qs, handler, internal, timeout, validation,
 };
 use wavesexchange_warp::log::access;
+use wavesexchange_warp::MetricsWarpBuilder;
 
 use crate::data_entries;
 use errors::*;
 use historical::HistoricalRequestParams;
 use itertools::Itertools;
 use parsing::{Entry, MgetByAddress, MgetEntries, SearchRequest};
-use wavesexchange_warp::endpoints::{livez, readyz, startz};
 
 const ERROR_CODES_PREFIX: u16 = 95; // internal service
 
@@ -94,7 +94,7 @@ impl Reply for DataEntriesResponse {
     }
 }
 
-pub async fn start(port: u16, repo: data_entries::Repo) {
+pub async fn start(port: u16, metrics_port: u16, repo: data_entries::Repo) {
     let with_repo = warp::any().map(move || repo.clone());
 
     let request_tracing = warp::trace(|info| {
@@ -175,10 +175,9 @@ pub async fn start(port: u16, repo: data_entries::Repo) {
 
     let log = warp::log::custom(access);
 
-    let routes = livez()
-        .or(readyz())
-        .or(startz())
-        .or(search)
+    info!("Starting web server at 0.0.0.0:{}", port);
+
+    let routes = search
         .or(mget_entries)
         .or(mget_by_address)
         .or(get_by_address_key)
@@ -188,8 +187,12 @@ pub async fn start(port: u16, repo: data_entries::Repo) {
         .with(request_tracing)
         .with(log);
 
-    info!("Starting web server at 0.0.0.0:{}", port);
-    warp::serve(routes).run(([0, 0, 0, 0], port)).await
+    MetricsWarpBuilder::new()
+        .with_main_routes(routes)
+        .with_main_routes_port(port)
+        .with_metrics_port(metrics_port)
+        .run_async()
+        .await;
 }
 
 fn decode_uri_string(s: String) -> Result<String, Rejection> {

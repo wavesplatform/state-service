@@ -24,7 +24,10 @@ async fn main() -> Result<(), error::Error> {
         config.tracing.jaeger_agent_endpoint,
     ) {
         tracing_enabled = true;
-        println!("tracing enabled: {}, {}", service_name_prefix, jaeger_agent_endpoint);
+        println!(
+            "tracing enabled: {}, {}",
+            service_name_prefix, jaeger_agent_endpoint
+        );
         global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
 
         let tracer = opentelemetry_jaeger::new_pipeline()
@@ -45,7 +48,7 @@ async fn main() -> Result<(), error::Error> {
         data_entries::Repo::new(pg_pool)
     };
 
-    api::start(config.port, data_entries_repo).await;
+    api::start(config.port, config.metrics_port, data_entries_repo).await;
 
     if tracing_enabled {
         global::shutdown_tracer_provider();

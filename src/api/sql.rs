@@ -251,6 +251,10 @@ impl From<SortItem> for SqlSort {
                 SqlSort::from(fragment_type),
                 SqlSort::from(direction)
             ),
+            SortItem::Key { direction } => format!("key {}", SqlSort::from(direction)),
+            SortItem::Value { direction } => format!("value {}", SqlSort::from(direction)),
+            SortItem::Address { direction } => format!("address {}", SqlSort::from(direction)),
+            SortItem::Base { direction } => format!("uid {}", SqlSort::from(direction)),
             SortItem::ValueFragment {
                 position,
                 fragment_type,
@@ -261,10 +265,6 @@ impl From<SortItem> for SqlSort {
                 SqlSort::from(fragment_type),
                 SqlSort::from(direction)
             ),
-            SortItem::Key { direction } => format!("key {}", SqlSort::from(direction)),
-            SortItem::Value { direction } => format!("value {}", SqlSort::from(direction)),
-            SortItem::Address { direction } => format!("address {}", SqlSort::from(direction)),
-            SortItem::Base { direction } => format!("uid {}", SqlSort::from(direction)),
         }
     }
 }
