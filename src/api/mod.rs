@@ -24,6 +24,7 @@ use itertools::Itertools;
 use parsing::{Entry, MgetByAddress, MgetEntries, SearchRequest};
 
 const ERROR_CODES_PREFIX: u16 = 95; // internal service
+const KEYS_LIMIT: u16 = 1000;
 
 #[derive(Clone, Debug)]
 enum DataEntryType {
@@ -459,6 +460,16 @@ async fn mget_by_address_handler(
     get_params: HashMap<String, String>,
 ) -> Result<MgetResponse, Rejection> {
     let keys = query.keys.clone();
+    if query.keys.len() > KEYS_LIMIT as usize {
+        let details = ErrorDetails {
+            parameter: "keys".to_string(),
+            reason: format!("Too many keys. The maximum number of keys is {KEYS_LIMIT}."),
+        };
+        return Err(warp::reject::custom::<AppError>(
+            AppError::new_validation_error(ValidationErrorCode::InvalidParamenterValue, details),
+        ));
+    }
+
     let mget_entries = MgetEntries::from_query_by_address(address, query.keys);
 
     let hp = HistoricalRequestParams::from_hashmap(&get_params)?;
