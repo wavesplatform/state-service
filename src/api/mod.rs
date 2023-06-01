@@ -24,6 +24,7 @@ use itertools::Itertools;
 use parsing::{Entry, MgetByAddress, MgetEntries, SearchRequest};
 
 const ERROR_CODES_PREFIX: u16 = 95; // internal service
+const KEYS_LIMIT: u16 = 1000;
 
 #[derive(Clone, Debug)]
 enum DataEntryType {
@@ -156,6 +157,14 @@ pub async fn start(port: u16, metrics_port: u16, repo: data_entries::Repo) {
         .and(warp::query::<HashMap<String, String>>())
         .and_then(mget_handler);
 
+    let post_by_address = warp::path!("entries" / String)
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json::<MgetByAddress>())
+        .and(with_repo.clone())
+        .and(warp::query::<HashMap<String, String>>())
+        .and_then(mget_by_address_handler);
+
     let mget_by_address = warp::path!("entries" / String)
         .and(warp::path::end())
         .and(warp::get())
@@ -180,6 +189,7 @@ pub async fn start(port: u16, metrics_port: u16, repo: data_entries::Repo) {
     let routes = search
         .or(mget_entries)
         .or(mget_by_address)
+        .or(post_by_address)
         .or(get_by_address_key)
         .recover(move |rej| {
             error_handler_with_serde_qs(ERROR_CODES_PREFIX, error_handler.clone())(rej)
@@ -450,6 +460,16 @@ async fn mget_by_address_handler(
     get_params: HashMap<String, String>,
 ) -> Result<MgetResponse, Rejection> {
     let keys = query.keys.clone();
+    if query.keys.len() > KEYS_LIMIT as usize {
+        let details = ErrorDetails {
+            parameter: "keys".to_string(),
+            reason: format!("Too many keys. The maximum number of keys is {KEYS_LIMIT}."),
+        };
+        return Err(warp::reject::custom::<AppError>(
+            AppError::new_validation_error(ValidationErrorCode::InvalidParamenterValue, details),
+        ));
+    }
+
     let mget_entries = MgetEntries::from_query_by_address(address, query.keys);
 
     let hp = HistoricalRequestParams::from_hashmap(&get_params)?;
