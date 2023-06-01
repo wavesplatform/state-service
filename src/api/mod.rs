@@ -156,6 +156,14 @@ pub async fn start(port: u16, metrics_port: u16, repo: data_entries::Repo) {
         .and(warp::query::<HashMap<String, String>>())
         .and_then(mget_handler);
 
+    let post_by_address = warp::path!("entries" / String)
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json::<MgetByAddress>())
+        .and(with_repo.clone())
+        .and(warp::query::<HashMap<String, String>>())
+        .and_then(mget_by_address_handler);
+
     let mget_by_address = warp::path!("entries" / String)
         .and(warp::path::end())
         .and(warp::get())
@@ -180,6 +188,7 @@ pub async fn start(port: u16, metrics_port: u16, repo: data_entries::Repo) {
     let routes = search
         .or(mget_entries)
         .or(mget_by_address)
+        .or(post_by_address)
         .or(get_by_address_key)
         .recover(move |rej| {
             error_handler_with_serde_qs(ERROR_CODES_PREFIX, error_handler.clone())(rej)
