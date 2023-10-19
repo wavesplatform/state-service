@@ -4,7 +4,9 @@ use tokio::task::block_in_place;
 use tracing::{info_span, instrument};
 
 use crate::api::historical::HistoricalRequestParams;
+use crate::api::parsing::AndFilter;
 use crate::api::parsing::MgetEntries;
+use crate::api::parsing::RequestFilter;
 use crate::db::PgPool;
 use crate::error::Error;
 use crate::schema::blocks_microblocks;
@@ -108,13 +110,28 @@ impl Repo {
     #[instrument(level = "trace", skip(self, filter, sort, limit, offset))]
     pub async fn search_data_entries(
         &self,
-        filter: Option<impl Into<SqlWhere>>,
+        filter: Option<RequestFilter>,
         sort: Option<impl Into<SqlSort>>,
         limit: u64,
         offset: u64,
     ) -> Result<Vec<DataEntry>, Error> {
         block_in_place(|| {
+            let mut addr_key_cnt = 0;
+
+            match &filter {
+                Some(RequestFilter::And(AndFilter(and_filter))) => {
+                    and_filter.iter().for_each(|f| match f {
+                        RequestFilter::Address(_) | RequestFilter::Key(_) => {
+                            addr_key_cnt += 1;
+                        }
+                        _ => {}
+                    });
+                }
+                _ => {}
+            };
+
             let mut query_where_string: String = filter.map_or("".to_string(), |f| f.into());
+
             if query_where_string.len() > 0 {
                 query_where_string = format!("AND {}", query_where_string);
             }
@@ -125,6 +142,19 @@ impl Repo {
                 query_sort_string = format!("ORDER BY {}", query_sort_string);
             }
 
+            // if we have RequestFilter::Address and RequestFilter::Key in search conditions
+            // then skip substitution ORDER BY and LIMIT ... OFFSET parts in inner subquery
+            // to avoid postgres performance issue
+            // values by this filters are unique in table with superseded_by = $1 condition
+            let (inner_query_sort_string, inner_limit_offset) = if addr_key_cnt >= 2 {
+                ("".into(), "".into())
+            } else {
+                (
+                    query_sort_string.clone(),
+                    format!("LIMIT {} OFFSET {}", limit, offset),
+                )
+            };
+
             let _g0 = info_span!("db_conn").entered();
             let conn = &self.pg_pool.get()?;
             let _g1 = info_span!("db_query").entered();
@@ -132,17 +162,22 @@ impl Repo {
             let sql = format!(
                 "
                 with entries_uids as (
-                    select de.uid FROM data_entries de {} AND de.superseded_by = $1 {} {} LIMIT {} OFFSET {}
-                ), 
+                    select de.uid FROM data_entries de {} AND de.superseded_by = $1 {} {} {}
+                ),
                 entries_data as (
-                    select {} 
-                    FROM data_entries de 
-                    LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid 
+                    select {}
+                    FROM data_entries de
+                    LEFT JOIN blocks_microblocks bm ON bm.uid = de.block_uid
                     WHERE de.uid in (select uid from entries_uids)
                 )
                 select * from entries_data de {}
             ",
-                BASE_WHERE, query_where_string, query_sort_string, limit, offset, BASE_QUERY_FIELDS, query_sort_string
+                BASE_WHERE,
+                query_where_string,
+                inner_query_sort_string,
+                inner_limit_offset,
+                BASE_QUERY_FIELDS,
+                query_sort_string
             );
 
             diesel::sql_query(&sql)
